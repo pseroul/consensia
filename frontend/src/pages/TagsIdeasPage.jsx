@@ -371,11 +371,19 @@ const TagsIdeasPage = () => {
   }, []);
 
   /**
-   * Toggle all sections collapsed/expanded
+   * Collapse all sections
    * @returns {void}
    */
-  const toggleAllSections = () => {
-    setAllCollapsed(!allCollapsed);
+  const collapseAllSections = () => {
+    setAllCollapsed(true);
+  };
+
+  /**
+   * Expand all sections
+   * @returns {void}
+   */
+  const expandAllSections = () => {
+    setAllCollapsed(false);
   };
 
   /**
@@ -444,14 +452,20 @@ const TagsIdeasPage = () => {
           </div>
           <div className="ml-auto flex gap-2">
             <button
-              onClick={toggleAllSections}
+              onClick={collapseAllSections}
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-              aria-label={allCollapsed ? "Expand all sections" : "Collapse all sections"}
+              aria-label="Collapse all sections"
             >
-              <ChevronRight size={18} className={allCollapsed ? "" : "rotate-90"} />
-              <span className="text-sm font-medium">
-                {allCollapsed ? "Expandable" : "Collapse All"}
-              </span>
+              <ChevronRight size={18} className="" />
+              <span className="text-sm font-medium">Collapse All</span>
+            </button>
+            <button
+              onClick={expandAllSections}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              aria-label="Expand all sections"
+            >
+              <ChevronRight size={18} className="rotate-90" />
+              <span className="text-sm font-medium">Expand All</span>
             </button>
             <button
               onClick={refreshTagsAndIdeas}
