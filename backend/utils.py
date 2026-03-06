@@ -1,5 +1,5 @@
 
-def format_text(name: str, description: str) -> str:
+def format_text(name: str, description: str, tags: list[str]) -> str:
         """
         Format text for storage in the embedding database.
         
@@ -12,9 +12,9 @@ def format_text(name: str, description: str) -> str:
         Returns:
             str: Formatted string combining name and description
         """
-        return f"{name}. {name}: {description}"
+        return f"{name} / [{';'.join(tag for tag in tags)}] : {description}"
     
-def unformat_text(name: str, description: str) -> str:
+def unformat_text(name: str, description: str, tags: list[str]) -> str:
     """
     Unformat text from the embedding database storage format.
     
@@ -28,4 +28,4 @@ def unformat_text(name: str, description: str) -> str:
     Returns:
         str: Extracted original description
     """
-    return description.replace(f"{name}. {name}:", "")
+    return description.replace(f"{name} / [{';'.join(tag for tag in tags)}] : ", "")

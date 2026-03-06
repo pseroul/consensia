@@ -1,0 +1,32 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Navbar Component > matches snapshot 1`] = `
+<DocumentFragment>
+  <nav
+    class="bg-white border-b border-gray-200 fixed top-0 w-full z-[100] shadow-sm"
+  >
+    <div
+      class="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center"
+    >
+      <div
+        class="flex items-center gap-2 font-bold text-blue-600"
+      >
+        <svg
+          alt="Brainiac5 Logo"
+          data-testid="logo"
+        />
+        <span>
+          Consensia
+        </span>
+      </div>
+      <button
+        class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
+      >
+        <svg
+          data-testid="menu-icon"
+        />
+      </button>
+    </div>
+  </nav>
+</DocumentFragment>
+`;

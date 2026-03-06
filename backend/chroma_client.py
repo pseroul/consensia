@@ -34,7 +34,7 @@ class ChromaClient:
             embedding_function=self.emb_fn
         )
 
-    def insert_idea(self, title: str, content: str) -> None:
+    def insert_idea(self, title: str, content: str, tags: list[str]) -> None:
         """
         Insert new data into the embedding database.
         
@@ -44,14 +44,15 @@ class ChromaClient:
         Args:
             title (str): The title of the idea to insert
             content (str): The content of the idea to insert
+            tags (list[str]): The tags of the idea to insert
         """
         self.collection.add(
-            documents=[utils.format_text(title, content)],
+            documents=[utils.format_text(title, content, tags)],
             metadatas=[{"title": title}],
             ids=[title]
         )
 
-    def update_idea(self, title: str, content: str) -> None:
+    def update_idea(self, title: str, content: str, tags: list[str]) -> None:
         """
         Update existing data in the embedding database.
         
@@ -61,9 +62,10 @@ class ChromaClient:
         Args:
             title (str): The name/title of the idea to update
             content (str): The new content for the idea
+            tags (list[str]): The new tags of the idea
         """
         self.collection.update(
-            documents=[utils.format_text(title, content)],
+            documents=[utils.format_text(title, content, tags)],
             metadatas=[{"title": title}],
             ids=[title]
         )

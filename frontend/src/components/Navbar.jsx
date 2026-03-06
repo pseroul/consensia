@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X, LogOut, Lightbulb, Home, Settings, User, Tag } from 'lucide-react';
 
-const Navbar = () => {
-  const [isOpen, setIsOpen] = useState(false);
+const Navbar = ({ isOpen: controlledIsOpen = false }) => {
+  const [isOpen, setIsOpen] = useState(controlledIsOpen);
   const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
 
   if (!isAuthenticated) return null;

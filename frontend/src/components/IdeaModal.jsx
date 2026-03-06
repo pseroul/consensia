@@ -47,29 +47,41 @@ const IdeaModal = ({ isOpen, onClose, onSave, initialData }) => {
       tags: tags.length > 0 ? tags.join(';') : "" // Send as semicolon-separated string
     };
 
-    onSave(dataToSave).finally(() => {
+    const savePromise = onSave(dataToSave);
+    if (savePromise && typeof savePromise.finally === 'function') {
+      savePromise.finally(() => {
+        setIsSaving(false);
+      });
+    } else {
       setIsSaving(false);
-    });
+    }
   };
 
   if (!isOpen) return null;
 
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black bg-opacity-70">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+    <div data-testid="modal-overlay" onClick={handleOverlayClick} className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black bg-opacity-70">
+      <div data-testid="modal-content" role="dialog" className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-900">
             {initialData ? 'Modifier l’idée' : 'Nouvelle Idée'}
           </h2>
-          <button onClick={onClose} type="button" className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+          <button onClick={onClose} type="button" data-testid="close-button" aria-label="Close" className="p-1 hover:bg-gray-100 rounded-full transition-colors">
             <X size={24} className="text-gray-400" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} role="form" className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Title</label>
+            <label htmlFor="title" className="block text-sm font-semibold text-gray-700 mb-1">Title</label>
             <input 
+              id="title"
               required
               className="w-full border border-gray-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-gray-50 text-black"
               placeholder="Artificial Intelligence"
@@ -79,8 +91,9 @@ const IdeaModal = ({ isOpen, onClose, onSave, initialData }) => {
           </div>
           
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Content</label>
+            <label htmlFor="content" className="block text-sm font-semibold text-gray-700 mb-1">Content</label>
             <textarea 
+              id="content"
               required
               rows="4"
               className="w-full border border-gray-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-gray-50 resize-none text-black"
@@ -124,6 +137,7 @@ const IdeaModal = ({ isOpen, onClose, onSave, initialData }) => {
             </button>
             <button 
               type="submit"
+              data-testid="submit-button"
               disabled={isSaving}
               className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-95 disabled:opacity-80 disabled:cursor-wait"
             >

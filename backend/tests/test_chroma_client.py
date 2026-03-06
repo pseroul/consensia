@@ -33,7 +33,7 @@ class TestChromaClient:
         # Setup the client manually for this test
         self.setup_method()
         # Test that insert_idea calls collection.add with correct parameters
-        self.chroma_client.insert_idea("Test Idea", "This is a test description")
+        self.chroma_client.insert_idea("Test Idea", "This is a test description", [])
         
         self.mock_collection.add.assert_called_once()
         # Get the kwargs from the call
@@ -49,7 +49,7 @@ class TestChromaClient:
         # Setup the client manually for this test
         self.setup_method()
         # Test that update_idea calls collection.update with correct parameters
-        self.chroma_client.update_idea("Updated Idea", "This is an updated description")
+        self.chroma_client.update_idea("Updated Idea", "This is an updated description", [])
         
         self.mock_collection.update.assert_called_once()
         # Get the kwargs from the call
@@ -118,49 +118,3 @@ class TestChromaClient:
             limit=100
         )
         assert result == mock_result
-
-# Simple test runner that doesn't require pytest
-def run_tests():
-    """Run tests manually without pytest dependency"""
-    try:
-        print("Running test_init...")
-        test_instance = TestChromaClient()
-        test_instance.test_init()
-        print("✅ test_init passed")
-        
-        print("Running test_insert_idea...")
-        test_instance = TestChromaClient()
-        test_instance.test_insert_idea()
-        print("✅ test_insert_idea passed")
-        
-        print("Running test_update_idea...")
-        test_instance = TestChromaClient()
-        test_instance.test_update_idea()
-        print("✅ test_update_idea passed")
-        
-        print("Running test_remove_idea...")
-        test_instance = TestChromaClient()
-        test_instance.test_remove_idea()
-        print("✅ test_remove_idea passed")
-        
-        print("Running test_get_similar_idea...")
-        test_instance = TestChromaClient()
-        test_instance.test_get_similar_idea()
-        print("✅ test_get_similar_idea passed")
-        
-        print("Running test_get_all_data...")
-        test_instance = TestChromaClient()
-        test_instance.test_get_all_data()
-        print("✅ test_get_all_data passed")
-        
-        print("\n🎉 All tests passed!")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Test failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-if __name__ == "__main__":
-    run_tests()

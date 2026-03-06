@@ -408,7 +408,3 @@ class TestDataHandler:
         
         # Verify that insert_idea was called
         mock_instance.insert_idea.assert_called()
-
-if __name__ == "__main__":
-    # Run tests manually if executed directly
-    pytest.main([__file__, "-v"])
