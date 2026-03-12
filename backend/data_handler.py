@@ -125,6 +125,43 @@ def get_ideas() -> list[dict[Hashable, Any]]:
     df = df.fillna('')
     return df.to_dict("records")
 
+def get_user_ideas(user_email: str) -> list[dict[Hashable, Any]]:
+    """
+    Retrieve all ideas of a user from the database with limit to prevent memory issues.
+    
+    Gets all records from the ideas table in the SQLite database.
+    
+    Args:
+        user_email (str): user email address
+        
+    Returns:
+        list[dict[Hashable, Any]]: List of dictionaries containing all ideas
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    query = f"""
+    SELECT 
+        i.id, 
+        i.title, 
+        i.content, 
+        GROUP_CONCAT(r.tag_name, ';') AS tags
+    FROM 
+        ideas i
+    LEFT JOIN 
+        relations r ON i.id = r.idea_id
+    JOIN 
+        users u ON i.owner_id = u.id
+    WHERE 
+        u.email = ?
+    GROUP BY 
+        i.id, i.title, i.content;
+    """
+    df = pd.read_sql_query(query, conn, params=[user_email])
+    conn.close()
+    
+    # Handle potential NaN values in the dataframe
+    df = df.fillna('')
+    return df.to_dict("records")
+
 def get_content(idea_id: int) -> str:
     """
     Retrieve the content of a specific idea.

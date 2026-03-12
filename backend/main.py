@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 logger = logging.getLogger("uvicorn.error")
 
 from data_handler import (
-    init_database, get_ideas, get_idea_from_tags,
+    init_database, get_ideas, get_user_ideas, get_idea_from_tags,
     get_content, get_tags, get_tags_from_idea, add_idea, add_tag, 
     add_relation, remove_idea, remove_tag, remove_relation, update_idea, get_similar_idea
 )
@@ -156,7 +156,23 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 # GET endpoints
 @app.get("/ideas", response_model=List[IdeaItem])
-async def get_all_ideas(current_user: dict = Depends(get_current_user)) -> List[dict[Hashable, Any]]:
+async def get_all_ideas() -> List[dict[Hashable, Any]]:
+    """Get all ideas.
+    
+    Returns:
+        List[dict[Hashable, Any]]: List of ideas with their details.
+    
+    Raises:
+        HTTPException: If there's an error retrieving data from the database.
+    """
+    try:
+        ideas = get_ideas()
+        return ideas
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving data: {str(e)}")
+
+@app.get("/user/ideas", response_model=List[IdeaItem])
+async def get_user_ideas(current_user: dict = Depends(get_current_user)) -> List[dict[Hashable, Any]]:
     """Get all ideas with optional limit.
     
     Args:
@@ -171,7 +187,10 @@ async def get_all_ideas(current_user: dict = Depends(get_current_user)) -> List[
         HTTPException: If there's an error retrieving data from the database.
     """
     try:
-        ideas = get_ideas()
+        user_email = current_user.get("email")
+        if not user_email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        ideas = get_user_ideas(user_email)
         return ideas
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving data: {str(e)}")

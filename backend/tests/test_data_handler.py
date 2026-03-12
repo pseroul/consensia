@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from backend.data_handler import (
     init_database,
     get_idea_from_tags,
+    get_user_ideas,
     get_ideas,
     get_content,
     get_tags,
@@ -408,3 +409,115 @@ class TestDataHandler:
         
         # Verify that insert_idea was called
         mock_instance.insert_idea.assert_called()
+
+    def test_get_user_ideas_empty(self) -> None:
+        """Test get_user_ideas when user has no ideas"""
+        init_database()
+        
+        # Insert a user
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+                      ("testuser", "test@example.com", "hashed_password"))
+        conn.commit()
+        conn.close()
+        
+        result = get_user_ideas("test@example.com")
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    def test_get_user_ideas_with_data(self) -> None:
+        """Test get_user_ideas with sample data"""
+        init_database()
+        
+        # Insert test data
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        
+        # Insert two users
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+                      ("user1", "user1@example.com", "hashed_password"))
+        user1_id = cursor.lastrowid
+        
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+                      ("user2", "user2@example.com", "hashed_password"))
+        user2_id = cursor.lastrowid
+        
+        # Insert ideas for user1
+        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
+                      ("User1 Idea", "User1 Content", user1_id))
+        idea1_id = cursor.lastrowid
+        
+        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
+                      ("User1 Idea 2", "User1 Content 2", user1_id))
+        
+        # Insert idea for user2
+        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
+                      ("User2 Idea", "User2 Content", user2_id))
+        
+        # Add tags
+        cursor.execute("INSERT INTO tags (name) VALUES (?)", ("tag1",))
+        cursor.execute("INSERT INTO tags (name) VALUES (?)", ("tag2",))
+        
+        # Add relations
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", 
+                      (idea1_id, "tag1"))
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", 
+                      (idea1_id, "tag2"))
+        
+        conn.commit()
+        conn.close()
+        
+        # Test getting ideas for user1
+        result = get_user_ideas("user1@example.com")
+        assert len(result) == 2
+        assert result[0]['title'] == "User1 Idea"
+        assert result[0]['content'] == "User1 Content"
+        assert 'tag1' in result[0]['tags']
+        assert 'tag2' in result[0]['tags']
+        
+        # Test getting ideas for user2
+        result = get_user_ideas("user2@example.com")
+        assert len(result) == 1
+        assert result[0]['title'] == "User2 Idea"
+        assert result[0]['content'] == "User2 Content"
+
+    def test_get_user_ideas_nonexistent_user(self) -> None:
+        """Test get_user_ideas with non-existent user email"""
+        init_database()
+        
+        # Insert a user
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+                      ("testuser", "test@example.com", "hashed_password"))
+        conn.commit()
+        conn.close()
+        
+        # Try to get ideas for a non-existent user
+        result = get_user_ideas("nonexistent@example.com")
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    def test_get_user_ideas_without_tags(self) -> None:
+        """Test get_user_ideas when ideas have no tags"""
+        init_database()
+        
+        # Insert test data
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+                      ("testuser", "test@example.com", "hashed_password"))
+        user_id = cursor.lastrowid
+        
+        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
+                      ("Idea without tags", "Content", user_id))
+        conn.commit()
+        conn.close()
+        
+        result = get_user_ideas("test@example.com")
+        assert len(result) == 1
+        assert result[0]['title'] == "Idea without tags"
+        # Tags should be empty string when no tags exist
+        assert result[0]['tags'] == ''

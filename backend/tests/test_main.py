@@ -21,11 +21,11 @@ class TestMainAPI:
         # Create a temporary database for testing
         self.test_db = os.path.join(os.path.dirname(__file__), "test_main_database.db")
         os.environ["NAME_DB"] = self.test_db
-        
+
         # Initialize the database
         from backend.data_handler import init_database
         init_database()
-        
+
         # Insert test user
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
@@ -39,7 +39,7 @@ class TestMainAPI:
         # Remove the test database file
         if os.path.exists(self.test_db):
             os.remove(self.test_db)
-    
+
     def _get_auth_headers(self):
         """Helper method to get authentication headers with valid JWT token"""
         # First, we need to verify OTP to get a token
@@ -47,13 +47,13 @@ class TestMainAPI:
             "email": "test@example.com",
             "otp_code": "123456"  # Any code, since we're mocking verify_access
         }
-        
+
         # Mock verify_access to return True
         with patch('backend.main.verify_access', return_value=True):
             response = client.post("/verify-otp", json=login_data)
             assert response.status_code == 200
             token = response.json()["access_token"]
-            
+
             return {"Authorization": f"Bearer {token}"}
 
     def test_health_check(self):
@@ -71,10 +71,10 @@ class TestMainAPI:
             {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1"},
             {"id": 2, "title": "Test Idea 2", "content": "Content 2", "tags": "tag2"}
         ]
-        
+
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         response = client.get("/ideas", headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -89,10 +89,10 @@ class TestMainAPI:
         mock_get_ideas_by_tags.return_value = [
             {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1"}
         ]
-        
+
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         response = client.get("/ideas/tags/tag1;tag2", headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -104,13 +104,13 @@ class TestMainAPI:
         """Test searching ideas"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Mock the get_similar_idea function
         # Note: tags should be strings, not lists, to match the Pydantic model
         mock_get_similar_idea.return_value = [
             {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1"}
         ]
-        
+
         response = client.get("/ideas/search/test", headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -121,10 +121,10 @@ class TestMainAPI:
         """Test getting idea content"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Mock the get_content function
         mock_get_content.return_value = "This is the content of idea 1"
-        
+
         response = client.get("/ideas/1/content", headers=headers)
         assert response.status_code == 200
         assert response.json() == "This is the content of idea 1"
@@ -134,13 +134,13 @@ class TestMainAPI:
         """Test getting all tags"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Mock the get_tags function
         mock_get_tags.return_value = [
             {"name": "tag1"},
             {"name": "tag2"}
         ]
-        
+
         response = client.get("/tags", headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -152,10 +152,10 @@ class TestMainAPI:
         """Test getting tags for a specific idea"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Mock the get_tags_from_idea function
         mock_get_tags_from_idea.return_value = ["tag1", "tag2"]
-        
+
         response = client.get("/ideas/1/tags", headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -167,13 +167,13 @@ class TestMainAPI:
         """Test getting similar ideas"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Mock the get_similar_idea function
         # Note: tags should be strings, not lists, to match the Pydantic model
         mock_get_similar_idea.return_value = [
             {"id": 2, "title": "Similar Idea", "content": "Similar content", "tags": "tag1"}
         ]
-        
+
         response = client.get("/ideas/similar/TestIdea", headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -187,25 +187,25 @@ class TestMainAPI:
         """Test creating a new idea"""
         # Mock the add_idea function to return an ID
         mock_add_idea.return_value = 1
-        
+
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Test with tags
         idea_data = {
             "title": "New Idea",
             "content": "This is a new idea",
             "tags": "tag1;tag2;tag3"
         }
-        
+
         response = client.post("/ideas", json=idea_data, headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert "id" in data
-        
+
         # Verify that add_idea was called with correct parameters
         mock_add_idea.assert_called_once_with("New Idea", "This is a new idea", owner=1)
-        
+
         # Verify that tags were processed
         assert mock_add_tag.call_count == 3
         assert mock_add_relation.call_count == 3
@@ -215,16 +215,16 @@ class TestMainAPI:
         """Test creating a new idea without tags"""
         # Mock the add_idea function to return an ID
         mock_add_idea.return_value = 1
-        
+
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Test without tags
         idea_data = {
             "title": "New Idea",
             "content": "This is a new idea"
         }
-        
+
         response = client.post("/ideas", json=idea_data, headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -235,9 +235,9 @@ class TestMainAPI:
         """Test creating a new tag"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         tag_data = {"name": "new-tag"}
-        
+
         response = client.post("/tags", json=tag_data, headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -249,12 +249,12 @@ class TestMainAPI:
         """Test creating a new relation"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         relation_data = {
             "idea_id": 1,
             "tag_name": "test-tag"
         }
-        
+
         response = client.post("/relations", json=relation_data, headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -266,15 +266,15 @@ class TestMainAPI:
     @patch('backend.main.add_tag')
     @patch('backend.main.add_relation')
     @patch('backend.main.remove_relation')
-    def test_update_idea(self, mock_remove_relation, mock_add_relation, mock_add_tag, 
+    def test_update_idea(self, mock_remove_relation, mock_add_relation, mock_add_tag,
                          mock_get_tags_from_idea, mock_update_idea):
         """Test updating an existing idea"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Mock the get_tags_from_idea function
         mock_get_tags_from_idea.return_value = ["old-tag1", "old-tag2"]
-        
+
         # Test with updated tags
         idea_data = {
             "id": 1,
@@ -282,12 +282,12 @@ class TestMainAPI:
             "content": "Updated content",
             "tags": "new-tag1;new-tag2"
         }
-        
+
         response = client.put("/ideas/1", json=idea_data, headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["message"] == "Idea '1' updated successfully"
-        
+
         # Verify that update_idea was called
         mock_update_idea.assert_called_once_with(id=1, title="Updated Idea", content="Updated content")
 
@@ -296,7 +296,7 @@ class TestMainAPI:
         """Test deleting an idea"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # DELETE endpoints with Pydantic models - use json parameter
         # Note: TestClient.delete() doesn't support json parameter directly
         # We need to use a workaround by sending the data as part of the request
@@ -331,7 +331,7 @@ class TestMainAPI:
         """Test deleting a relation"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # DELETE endpoints with Pydantic models - use json parameter
         # Note: TestClient.delete() doesn't support json parameter directly
         # We need to use a workaround by sending the data as part of the request
@@ -354,12 +354,12 @@ class TestMainAPI:
         """Test OTP verification success with JWT token"""
         # Mock the verify_access function to return True
         mock_verify_access.return_value = True
-        
+
         login_data = {
             "email": "test@example.com",
             "otp_code": "123456"
         }
-        
+
         response = client.post("/verify-otp", json=login_data)
         assert response.status_code == 200
         data = response.json()
@@ -367,11 +367,11 @@ class TestMainAPI:
         assert data["message"] == "Connection authorized"
         assert "access_token" in data
         assert data["token_type"] == "bearer"
-        
+
         # Verify the token is a valid JWT (can be decoded)
         from jose import jwt
         from backend.main import SECRET_KEY, ALGORITHM
-        
+
         token = data["access_token"]
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -385,12 +385,12 @@ class TestMainAPI:
         """Test OTP verification failure"""
         # Mock the verify_access function to return False
         mock_verify_access.return_value = False
-        
+
         login_data = {
             "email": "test@example.com",
             "otp_code": "invalid"
         }
-        
+
         response = client.post("/verify-otp", json=login_data)
         assert response.status_code == 401
         data = response.json()
@@ -403,18 +403,18 @@ class TestMainAPI:
         """Test getting TOC structure from cache"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Mock the load_toc_structure function to return cached data
         mock_load_toc.return_value = [
             {"title": "Section 1", "type": "heading", "children": []}
         ]
-        
+
         response = client.get("/toc/structure", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
         assert data[0]["title"] == "Section 1"
-        
+
         # Verify that DataSimilarity was not called (using cache)
         mock_data_similarity.assert_not_called()
 
@@ -424,23 +424,23 @@ class TestMainAPI:
         """Test generating new TOC structure when cache is empty"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Mock the load_toc_structure function to return None (no cache)
         mock_load_toc.return_value = None
-        
+
         # Mock the DataSimilarity class
         mock_instance = Mock()
         mock_instance.generate_toc_structure.return_value = [
             {"title": "New Section", "type": "heading", "children": []}
         ]
         mock_data_similarity.return_value = mock_instance
-        
+
         response = client.get("/toc/structure", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
         assert data[0]["title"] == "New Section"
-        
+
         # Verify that DataSimilarity was called to generate new structure
         mock_data_similarity.assert_called_once()
         mock_instance.generate_toc_structure.assert_called_once()
@@ -450,19 +450,19 @@ class TestMainAPI:
         """Test updating TOC structure"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Mock the DataSimilarity class
         mock_instance = Mock()
         mock_instance.generate_toc_structure.return_value = [
             {"title": "Updated Section", "type": "heading", "children": []}
         ]
         mock_data_similarity.return_value = mock_instance
-        
+
         response = client.post("/toc/update", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["message"] == "toc added successfully"
-        
+
         # Verify that DataSimilarity was called
         mock_data_similarity.assert_called_once()
         mock_instance.generate_toc_structure.assert_called_once()
@@ -479,11 +479,11 @@ class TestMainAPI:
         """Test error handling in get_all_ideas endpoint"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.get_ideas') as mock_get_ideas:
             # Mock the get_ideas function to raise an exception
             mock_get_ideas.side_effect = Exception("Database error")
-            
+
             response = client.get("/ideas", headers=headers)
             assert response.status_code == 500
             data = response.json()
@@ -494,16 +494,16 @@ class TestMainAPI:
         """Test error handling in create_idea endpoint"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.add_idea') as mock_add_idea:
             # Mock the add_idea function to raise an exception
             mock_add_idea.side_effect = Exception("Database error")
-            
+
             idea_data = {
                 "title": "New Idea",
                 "content": "This is a new idea"
             }
-            
+
             response = client.post("/ideas", json=idea_data, headers=headers)
             assert response.status_code == 500
             data = response.json()
@@ -514,13 +514,13 @@ class TestMainAPI:
         """Test invalid input in create_idea endpoint"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Test with missing required fields
         idea_data = {
             "title": "New Idea"
             # Missing content
         }
-        
+
         response = client.post("/ideas", json=idea_data, headers=headers)
         assert response.status_code == 422  # Validation error
 
@@ -528,10 +528,10 @@ class TestMainAPI:
         """Test invalid input in create_tag endpoint"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         # Test with missing required field
         tag_data = {}  # Missing name
-        
+
         response = client.post("/tags", json=tag_data, headers=headers)
         assert response.status_code == 422  # Validation error
 
@@ -543,7 +543,7 @@ class TestMainAPI:
             {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1"},
             {"id": 2, "title": "Test Idea 2", "content": "Content 2", "tags": "tag2"}
         ]
-        
+
         # First, get a JWT token
         with patch('backend.main.verify_access') as mock_verify_access:
             mock_verify_access.return_value = True
@@ -553,7 +553,7 @@ class TestMainAPI:
             }
             login_response = client.post("/verify-otp", json=login_data)
             token = login_response.json()["access_token"]
-        
+
         # Now test the protected endpoint with the token
         headers = {"Authorization": f"Bearer {token}"}
         response = client.get("/ideas", headers=headers)
@@ -567,7 +567,7 @@ class TestMainAPI:
         """Test getting all ideas without JWT authentication (should fail)"""
         # Mock the get_ideas function
         mock_get_ideas.return_value = []
-        
+
         # Test without authentication
         response = client.get("/ideas")
         assert response.status_code == 401  # Unauthorized
@@ -583,7 +583,7 @@ class TestMainAPI:
         """Test creating an idea with JWT authentication"""
         # Mock the add_idea function to return an ID
         mock_add_idea.return_value = 1
-        
+
         # First, get a JWT token
         with patch('backend.main.verify_access') as mock_verify_access:
             mock_verify_access.return_value = True
@@ -593,7 +593,7 @@ class TestMainAPI:
             }
             login_response = client.post("/verify-otp", json=login_data)
             token = login_response.json()["access_token"]
-        
+
         # Now test the protected endpoint with the token
         headers = {"Authorization": f"Bearer {token}"}
         idea_data = {
@@ -601,7 +601,7 @@ class TestMainAPI:
             "content": "This is a new idea",
             "tags": "tag1;tag2"
         }
-        
+
         response = client.post("/ideas", json=idea_data, headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -612,13 +612,13 @@ class TestMainAPI:
         """Test creating an idea without JWT authentication (should fail)"""
         # Mock the add_idea function
         mock_add_idea.return_value = 1
-        
+
         # Test without authentication
         idea_data = {
             "title": "New Idea",
             "content": "This is a new idea"
         }
-        
+
         response = client.post("/ideas", json=idea_data)
         assert response.status_code == 401  # Unauthorized
         data = response.json()
@@ -631,13 +631,13 @@ class TestMainAPI:
         from backend.main import create_access_token, get_current_user
         from datetime import datetime, timedelta
         from jose import jwt
-        
+
         # Create a token that expired 1 hour ago
         expired_token = create_access_token(
-            {"sub": "test@example.com"}, 
+            {"sub": "test@example.com"},
             expires_delta=timedelta(minutes=-60)
         )
-        
+
         # Test that the expired token is rejected
         headers = {"Authorization": f"Bearer {expired_token}"}
         response = client.get("/ideas", headers=headers)
@@ -650,7 +650,7 @@ class TestMainAPI:
         """Test with invalid JWT token"""
         # Use an invalid token
         invalid_token = "invalid.token.here"
-        
+
         headers = {"Authorization": f"Bearer {invalid_token}"}
         response = client.get("/ideas", headers=headers)
         assert response.status_code == 401  # Unauthorized
@@ -662,7 +662,7 @@ class TestMainAPI:
         """Test with malformed JWT token"""
         # Use a malformed token (missing parts)
         malformed_token = "invalid.token"
-        
+
         headers = {"Authorization": f"Bearer {malformed_token}"}
         response = client.get("/ideas", headers=headers)
         assert response.status_code == 401  # Unauthorized
@@ -685,7 +685,7 @@ class TestMainAPI:
         # Use wrong scheme (not Bearer)
         token = "some-token"
         headers = {"Authorization": f"Basic {token}"}
-        
+
         response = client.get("/ideas", headers=headers)
         assert response.status_code == 401  # Unauthorized
 
@@ -693,13 +693,13 @@ class TestMainAPI:
         """Test JWT token created for different email"""
         from backend.main import create_access_token
         from datetime import timedelta
-        
+
         # Create a token for a different user
         token = create_access_token(
-            {"sub": "different@example.com"}, 
+            {"sub": "different@example.com"},
             expires_delta=timedelta(minutes=30)
         )
-        
+
         # The token should still be valid (we're not checking user identity in the endpoint)
         headers = {"Authorization": f"Bearer {token}"}
         with patch('backend.main.get_ideas') as mock_get_ideas:
@@ -712,22 +712,22 @@ class TestMainAPI:
         from backend.main import create_access_token
         from datetime import timedelta, datetime
         from jose import jwt
-        
+
         # Create a token
         token = create_access_token(
-            {"sub": "test@example.com"}, 
+            {"sub": "test@example.com"},
             expires_delta=timedelta(minutes=30)
         )
-        
+
         # Decode and verify the payload structure
         from backend.main import SECRET_KEY, ALGORITHM
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        
+
         # Verify required fields
         assert "sub" in payload
         assert payload["sub"] == "test@example.com"
         assert "exp" in payload
-        
+
         # Verify expiration time is reasonable (within next 90 minutes to account for test timing)
         expire_time = datetime.fromtimestamp(payload["exp"])
         time_diff = expire_time - datetime.utcnow()
@@ -739,14 +739,14 @@ class TestMainAPI:
         from jose import jwt
         from backend.main import SECRET_KEY
         from datetime import datetime, timedelta
-        
+
         # Create a token with wrong algorithm
         wrong_algorithm_token = jwt.encode(
             {"sub": "test@example.com", "exp": datetime.utcnow() + timedelta(hours=1)},
             SECRET_KEY,
             algorithm="HS512"  # Wrong algorithm
         )
-        
+
         # Test that the token is rejected due to wrong algorithm
         headers = {"Authorization": f"Bearer {wrong_algorithm_token}"}
         response = client.get("/ideas", headers=headers)
@@ -763,9 +763,9 @@ class TestMainAPI:
             }
             login_response = client.post("/verify-otp", json=login_data)
             token = login_response.json()["access_token"]
-        
+
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         # Test multiple protected endpoints
         with patch('backend.main.get_ideas') as mock_get_ideas:
             with patch('backend.main.get_idea_from_tags') as mock_get_ideas_by_tags:
@@ -774,15 +774,15 @@ class TestMainAPI:
                     mock_get_ideas.return_value = [{"id": 1, "title": "Test", "content": "Content", "tags": "tag1"}]
                     mock_get_ideas_by_tags.return_value = [{"id": 1, "title": "Test", "content": "Content", "tags": "tag1"}]
                     mock_get_tags.return_value = [{"name": "tag1"}]
-                    
+
                     # Test GET /ideas
                     response = client.get("/ideas", headers=headers)
                     assert response.status_code == 200
-                    
+
                     # Test GET /ideas/tags/{tags}
                     response = client.get("/ideas/tags/tag1", headers=headers)
                     assert response.status_code == 200
-                    
+
                     # Test GET /tags
                     response = client.get("/tags", headers=headers)
                     assert response.status_code == 200
@@ -798,23 +798,23 @@ class TestMainAPI:
             }
             login_response = client.post("/verify-otp", json=login_data)
             token = login_response.json()["access_token"]
-        
+
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         # Use the same token for multiple requests
         with patch('backend.main.get_ideas') as mock_get_ideas:
             with patch('backend.main.get_tags') as mock_get_tags:
                 mock_get_ideas.return_value = [{"id": 1, "title": "Test", "content": "Content", "tags": "tag1"}]
                 mock_get_tags.return_value = [{"name": "tag1"}]
-                
+
                 # First request
                 response1 = client.get("/ideas", headers=headers)
                 assert response1.status_code == 200
-                
+
                 # Second request with same token
                 response2 = client.get("/tags", headers=headers)
                 assert response2.status_code == 200
-                
+
                 # Third request with same token
                 response3 = client.get("/ideas", headers=headers)
                 assert response3.status_code == 200
@@ -824,25 +824,103 @@ class TestMainAPI:
         from backend.main import create_access_token
         from datetime import timedelta
         from jose import jwt
-        
+
         # Create a token with email containing special characters
         special_email = "user+test@example.com"
         token = create_access_token(
-            {"sub": special_email}, 
+            {"sub": special_email},
             expires_delta=timedelta(minutes=30)
         )
-        
+
         # Verify the token contains the email correctly
         from backend.main import SECRET_KEY, ALGORITHM
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         assert payload["sub"] == special_email
-        
+
         # Test that the token works
         headers = {"Authorization": f"Bearer {token}"}
         with patch('backend.main.get_ideas') as mock_get_ideas:
             mock_get_ideas.return_value = []
             response = client.get("/ideas", headers=headers)
             assert response.status_code == 200
+
+    @patch('backend.main.get_user_ideas')
+    def test_get_user_ideas(self, mock_get_user_ideas):
+        """Test getting ideas for the current user"""
+        # Get authentication headers
+        headers = self._get_auth_headers()
+
+        # Mock the get_user_ideas function to return test data
+        # Note: tags should be strings, not lists, to match the Pydantic model
+        mock_get_user_ideas.return_value = [
+            {"id": 1, "title": "User Idea 1", "content": "Content 1", "tags": "tag1"},
+            {"id": 2, "title": "User Idea 2", "content": "Content 2", "tags": "tag2"}
+        ]
+
+        response = client.get("/user/ideas", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["title"] == "User Idea 1"
+
+        # Verify that get_user_ideas was called with the current user email
+        mock_get_user_ideas.assert_called_once_with("test@example.com")
+
+    @patch('backend.main.get_user_ideas')
+    def test_get_user_ideas_empty_result(self, mock_get_user_ideas):
+        """Test getting ideas for a user with no ideas"""
+        # Get authentication headers
+        headers = self._get_auth_headers()
+
+        # Mock the get_user_ideas function to return empty list
+        mock_get_user_ideas.return_value = []
+
+        response = client.get("/user/ideas", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+        # Verify that get_user_ideas was called
+        mock_get_user_ideas.assert_called_once()
+
+    @patch('backend.main.get_user_ideas')
+    def test_get_user_ideas_with_tags(self, mock_get_user_ideas):
+        """Test getting user ideas with tags"""
+        # Get authentication headers
+        headers = self._get_auth_headers()
+
+        # Mock the get_user_ideas function to return data with tags
+        # Note: tags should be strings, not lists, to match the Pydantic model
+        mock_get_user_ideas.return_value = [
+            {"id": 1, "title": "User Idea", "content": "Content", "tags": "tag1;tag2"}
+        ]
+
+        response = client.get("/user/ideas", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["tags"] == "tag1;tag2"
+
+        # Verify that get_user_ideas was called
+        mock_get_user_ideas.assert_called_once()
+
+    @patch('backend.main.get_user_ideas')
+    def test_get_user_ideas_error_handling(self, mock_get_user_ideas):
+        """Test error handling in get_user_ideas endpoint"""
+        # Get authentication headers
+        headers = self._get_auth_headers()
+
+        # Mock the get_user_ideas function to raise an exception
+        mock_get_user_ideas.side_effect = Exception("Database error")
+
+        response = client.get("/user/ideas", headers=headers)
+        assert response.status_code == 500
+        data = response.json()
+        assert "detail" in data
+        assert "Error retrieving data" in data["detail"]
+
+        # Verify that get_user_ideas was called
+        mock_get_user_ideas.assert_called_once()
 
 
 class TestEdgeCases:
@@ -855,29 +933,29 @@ class TestEdgeCases:
             "email": "test@example.com",
             "otp_code": "123456"  # Any code, since we're mocking verify_access
         }
-        
+
         # Mock verify_access to return True
         with patch('backend.main.verify_access', return_value=True):
             response = client.post("/verify-otp", json=login_data)
             assert response.status_code == 200
             token = response.json()["access_token"]
-            
+
             return {"Authorization": f"Bearer {token}"}
 
     def test_empty_tags_list(self):
         """Test handling of empty tags list"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.add_idea') as mock_add_idea:
             mock_add_idea.return_value = 1
-            
+
             idea_data = {
                 "title": "Idea with Empty Tags",
                 "content": "Content",
                 "tags": ""
             }
-            
+
             response = client.post("/ideas", json=idea_data, headers=headers)
             assert response.status_code == 200
             data = response.json()
@@ -887,21 +965,21 @@ class TestEdgeCases:
         """Test handling of tags with whitespace"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.add_idea') as mock_add_idea:
             with patch('backend.main.add_tag') as mock_add_tag:
                 with patch('backend.main.add_relation') as mock_add_relation:
                     mock_add_idea.return_value = 1
-                    
+
                     idea_data = {
                         "title": "Idea with Whitespace Tags",
                         "content": "Content",
                         "tags": "  tag1  ;  tag2  ;  tag3  "
                     }
-                    
+
                     response = client.post("/ideas", json=idea_data, headers=headers)
                     assert response.status_code == 200
-                    
+
                     # Verify that tags were processed correctly (whitespace stripped)
                     assert mock_add_tag.call_count == 3
 
@@ -909,21 +987,21 @@ class TestEdgeCases:
         """Test handling of special characters in tags"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.add_idea') as mock_add_idea:
             with patch('backend.main.add_tag') as mock_add_tag:
                 with patch('backend.main.add_relation') as mock_add_relation:
                     mock_add_idea.return_value = 1
-                    
+
                     idea_data = {
                         "title": "Idea with Special Tags",
                         "content": "Content",
                         "tags": "tag-1;tag_2;tag.3;tag@4"
                     }
-                    
+
                     response = client.post("/ideas", json=idea_data, headers=headers)
                     assert response.status_code == 200
-                    
+
                     # Verify that all tags were processed
                     assert mock_add_tag.call_count == 4
 
@@ -931,21 +1009,21 @@ class TestEdgeCases:
         """Test handling of duplicate tags"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.add_idea') as mock_add_idea:
             with patch('backend.main.add_tag') as mock_add_tag:
                 with patch('backend.main.add_relation') as mock_add_relation:
                     mock_add_idea.return_value = 1
-                    
+
                     idea_data = {
                         "title": "Idea with Duplicate Tags",
                         "content": "Content",
                         "tags": "tag1;tag2;tag1;tag3;tag2"
                     }
-                    
+
                     response = client.post("/ideas", json=idea_data, headers=headers)
                     assert response.status_code == 200
-                    
+
                     # Verify that all tags were processed (including duplicates)
                     assert mock_add_tag.call_count == 5
 
@@ -953,18 +1031,18 @@ class TestEdgeCases:
         """Test handling of very long content"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.add_idea') as mock_add_idea:
             mock_add_idea.return_value = 1
-            
+
             # Create a very long content string
             long_content = "A" * 10000
-            
+
             idea_data = {
                 "title": "Idea with Long Content",
                 "content": long_content
             }
-            
+
             response = client.post("/ideas", json=idea_data, headers=headers)
             assert response.status_code == 200
             data = response.json()
@@ -974,15 +1052,15 @@ class TestEdgeCases:
         """Test handling of special characters in title"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.add_idea') as mock_add_idea:
             mock_add_idea.return_value = 1
-            
+
             idea_data = {
                 "title": "Idea with Special Chars: / \\ | ? * < >",
                 "content": "Content"
             }
-            
+
             response = client.post("/ideas", json=idea_data, headers=headers)
             assert response.status_code == 200
             data = response.json()
@@ -992,15 +1070,15 @@ class TestEdgeCases:
         """Test handling of unicode characters"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.add_idea') as mock_add_idea:
             mock_add_idea.return_value = 1
-            
+
             idea_data = {
                 "title": "Idea with Unicode: 你好世界 🌍",
                 "content": "Content with unicode: café, naïve, résumé"
             }
-            
+
             response = client.post("/ideas", json=idea_data, headers=headers)
             assert response.status_code == 200
             data = response.json()
@@ -1010,10 +1088,10 @@ class TestEdgeCases:
         """Test searching with empty string"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.get_similar_idea') as mock_get_similar_idea:
             mock_get_similar_idea.return_value = []
-            
+
             # The endpoint expects a path parameter, so we need to provide a valid search term
             response = client.get("/ideas/search/empty", headers=headers)
             assert response.status_code == 200
@@ -1024,13 +1102,13 @@ class TestEdgeCases:
         """Test searching with special characters"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.get_similar_idea') as mock_get_similar_idea:
             # Note: tags should be strings, not lists, to match the Pydantic model
             mock_get_similar_idea.return_value = [
                 {"id": 1, "title": "Test Idea", "content": "Content", "tags": "tag1"}
             ]
-            
+
             response = client.get("/ideas/search/test?query=special", headers=headers)
             assert response.status_code == 200
 
@@ -1038,11 +1116,11 @@ class TestEdgeCases:
         """Test getting content for non-existent idea"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.get_content') as mock_get_content:
             # Mock the get_content function to raise an exception
             mock_get_content.side_effect = Exception("Idea not found")
-            
+
             response = client.get("/ideas/999999/content", headers=headers)
             assert response.status_code == 500
             data = response.json()
@@ -1052,17 +1130,17 @@ class TestEdgeCases:
         """Test updating non-existent idea"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.update_idea') as mock_update_idea:
             # Mock the update_idea function to raise an exception
             mock_update_idea.side_effect = Exception("Idea not found")
-            
+
             idea_data = {
                 "id": 999999,
                 "title": "Updated Idea",
                 "content": "Updated content"
             }
-            
+
             response = client.put("/ideas/999999", json=idea_data, headers=headers)
             assert response.status_code == 500
             data = response.json()
@@ -1072,11 +1150,11 @@ class TestEdgeCases:
         """Test deleting non-existent idea"""
         # Get authentication headers
         headers = self._get_auth_headers()
-        
+
         with patch('backend.main.remove_idea') as mock_remove_idea:
             # Mock the remove_idea function to raise an exception
             mock_remove_idea.side_effect = Exception("Idea not found")
-            
+
             response = client.request(
                 "DELETE",
                 "/ideas/999999",
@@ -1098,7 +1176,7 @@ class TestEdgeCases:
         with patch('backend.main.remove_tag') as mock_remove_tag:
             # Mock the remove_tag function to raise an exception
             mock_remove_tag.side_effect = Exception("Tag not found")
-            
+
             response = client.delete("/tags/nonexistent-tag", headers=headers)
             assert response.status_code == 500
             data = response.json()
@@ -1109,12 +1187,12 @@ class TestEdgeCases:
         with patch('backend.main.verify_access') as mock_verify_access:
             # Mock the verify_access function to return False
             mock_verify_access.return_value = False
-            
+
             login_data = {
                 "email": "test@example.com",
                 "otp_code": "invalid-code-with-dashes"
             }
-            
+
             response = client.post("/verify-otp", json=login_data)
             assert response.status_code == 401
             data = response.json()
@@ -1125,12 +1203,12 @@ class TestEdgeCases:
         with patch('backend.main.verify_access') as mock_verify_access:
             # Mock the verify_access function to return False
             mock_verify_access.return_value = False
-            
+
             login_data = {
                 "email": "test@example.com",
                 "otp_code": ""
             }
-            
+
             response = client.post("/verify-otp", json=login_data)
             assert response.status_code == 401
 
@@ -1140,7 +1218,7 @@ class TestEdgeCases:
         login_data = {
             "otp_code": "123456"
         }
-        
+
         response = client.post("/verify-otp", json=login_data)
         assert response.status_code == 422  # Validation error
 
@@ -1148,6 +1226,6 @@ class TestEdgeCases:
         login_data = {
             "email": "test@example.com"
         }
-        
+
         response = client.post("/verify-otp", json=login_data)
         assert response.status_code == 422  # Validation error
