@@ -1,221 +1,339 @@
 import sys
 import os
-from unittest.mock import Mock, patch, MagicMock
-import numpy as np
-import pytest
-
-# Add the backend directory to the path so we can import data_similarity
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+import pytest
+import numpy as np
+
 from backend.data_similarity import (
+    IdeaData,
+    ClusteringResult,
+    TocEntry,
+    FileTocCache,
+    EmbeddingAnalyzer,
+    TitleGenerator,
+    TocTreeBuilder,
     DataSimilarity,
-    save_toc_structure,
-    load_toc_structure,
-    unformat_text
 )
 
 
-class TestDataSimilarity:
-    """Test cases for DataSimilarity class"""
+# ---------------------------------------------------------------------------
+# Fixtures & helpers
+# ---------------------------------------------------------------------------
 
-    def setup_method(self):
-        """Set up test fixtures before each test method."""
-        self.data_similarity = DataSimilarity()
+def _random_embeddings(n: int, dim: int = 8, seed: int = 0) -> list[list[float]]:
+    """Return reproducible random unit-normalised embeddings."""
+    rng = np.random.default_rng(seed)
+    X = rng.standard_normal((n, dim)).astype("float32")
+    norms = np.linalg.norm(X, axis=1, keepdims=True)
+    return (X / norms).tolist()
 
-    @patch('backend.data_similarity.ChromaClient')
-    @patch('backend.data_similarity.save_toc_structure')
-    def test_generate_toc_structure(self, mock_save, mock_chroma_client):
-        """Test generate_toc_structure method"""
-        # Mock the ChromaClient to return test data
-        mock_instance = Mock()
-        mock_chroma_client.return_value = mock_instance
-        
-        # Mock the get_all_ideas response
-        mock_instance.get_all_ideas.return_value = {
-            'documents': ['doc1', 'doc2', 'doc3'],
-            'ids': ['id1', 'id2', 'id3'],
-            'embeddings': [
-                [0.1, 0.2, 0.3],
-                [0.4, 0.5, 0.6],
-                [0.7, 0.8, 0.9]
-            ]
+
+def _make_idea_data(n: int = 10, dim: int = 8) -> IdeaData:
+    return IdeaData(
+        documents=[f"This is idea number {i} about topic {i % 3}" for i in range(n)],
+        ids=[f"id_{i}" for i in range(n)],
+        embeddings=_random_embeddings(n, dim),
+    )
+
+
+class FakeCache:
+    """In-memory TocCachePort stub."""
+    def __init__(self) -> None:
+        self._store: list[dict] | None = None
+
+    def save(self, structure: list[dict]) -> None:
+        self._store = structure
+
+    def load(self) -> list[dict] | None:
+        return self._store
+
+
+class FakeRepository:
+    """IdeaRepository stub that returns a fixed IdeaData."""
+    def __init__(self, data: IdeaData) -> None:
+        self._data = data
+
+    def get_all_ideas(self) -> dict:
+        return {
+            "documents": self._data.documents,
+            "ids": self._data.ids,
+            "embeddings": self._data.embeddings,
         }
-        
-        # Mock the generate_originality_score method
-        with patch.object(self.data_similarity, 'generate_originality_score', return_value=[0.5, 0.6, 0.7]):
-            with patch.object(self.data_similarity, '_generate_toc_structure', return_value=[{'title': 'Test'}]):
-                result = self.data_similarity.generate_toc_structure()
-                
-                # Verify the result
-                assert result == [{'title': 'Test'}]
-                
-                # Verify that save_toc_structure was called
-                mock_save.assert_called_once()
 
-    def test_generate_originality_score(self):
-        """Test generate_originality_score method"""
-        # Create test embeddings
-        embeddings = [
-            [0.1, 0.2, 0.3],
-            [0.4, 0.5, 0.6],
-            [0.7, 0.8, 0.9]
+
+class FakeAnalyzer:
+    """
+    EmbeddingAnalyzer stub that returns deterministic results.
+    Splits N items into two equal clusters (first half / second half)
+    and assigns linearly increasing originality scores.
+    """
+    def analyze(self, embeddings: list[list[float]]) -> ClusteringResult:
+        n = len(embeddings)
+        labels = np.array([0 if i < n // 2 else 1 for i in range(n)], dtype=int)
+        if n < 4:
+            # Too small to split meaningfully → single cluster
+            labels = np.zeros(n, dtype=int)
+        originalities = np.linspace(0.1, 0.9, n, dtype="float32")
+        return ClusteringResult(labels=labels, originalities=originalities)
+
+
+# ---------------------------------------------------------------------------
+# TocEntry
+# ---------------------------------------------------------------------------
+
+class TestTocEntry:
+    def test_leaf_to_dict_contains_required_fields(self):
+        entry = TocEntry(
+            title="my_id", type="idea", originality="55%",
+            id="my_id", text="formatted text",
+        )
+        d = entry.to_dict()
+        assert d["type"] == "idea"
+        assert d["id"] == "my_id"
+        assert d["text"] == "formatted text"
+        assert "level" not in d
+        assert "children" not in d
+
+    def test_heading_to_dict_contains_children(self):
+        child = TocEntry(title="c", type="idea", originality="10%", id="c")
+        heading = TocEntry(
+            title="Section", type="heading", originality="40%",
+            level=1, children=[child],
+        )
+        d = heading.to_dict()
+        assert d["level"] == 1
+        assert len(d["children"]) == 1
+        assert "id" not in d
+
+    def test_empty_children_list_not_serialised(self):
+        entry = TocEntry(title="h", type="heading", originality="0%", level=1)
+        d = entry.to_dict()
+        assert "children" not in d
+
+
+# ---------------------------------------------------------------------------
+# FileTocCache
+# ---------------------------------------------------------------------------
+
+class TestFileTocCache:
+    def test_raises_when_no_path_configured(self, monkeypatch):
+        monkeypatch.delenv("TOC_CACHE_PATH", raising=False)
+        with pytest.raises(ValueError, match="TOC_CACHE_PATH"):
+            FileTocCache()
+
+    def test_save_and_load_roundtrip(self, tmp_path):
+        path = str(tmp_path / "toc.json")
+        cache = FileTocCache(cache_path=path)
+        structure = [{"title": "A", "type": "heading", "originality": "50%"}]
+        cache.save(structure)
+        loaded = cache.load()
+        assert loaded == structure
+
+    def test_load_returns_none_when_file_missing(self, tmp_path):
+        cache = FileTocCache(cache_path=str(tmp_path / "missing.json"))
+        assert cache.load() is None
+
+    def test_load_returns_none_on_corrupt_json(self, tmp_path):
+        path = tmp_path / "corrupt.json"
+        path.write_text("{ not valid json }")
+        cache = FileTocCache(cache_path=str(path))
+        assert cache.load() is None
+
+
+# ---------------------------------------------------------------------------
+# EmbeddingAnalyzer
+# ---------------------------------------------------------------------------
+
+class TestEmbeddingAnalyzer:
+    def test_small_dataset_fallback(self):
+        """Fewer than 2*min_cluster_size points → all originalities == 1."""
+        analyzer = EmbeddingAnalyzer(min_cluster_size=3)
+        result = analyzer.analyze(_random_embeddings(4))
+        assert len(result.labels) == 4
+        assert len(result.originalities) == 4
+        np.testing.assert_array_equal(result.originalities, np.ones(4))
+
+    def test_output_shapes_match_input(self):
+        analyzer = EmbeddingAnalyzer(min_cluster_size=3)
+        n = 20
+        result = analyzer.analyze(_random_embeddings(n, dim=16))
+        assert result.labels.shape == (n,)
+        assert result.originalities.shape == (n,)
+
+    def test_originalities_in_unit_range(self):
+        analyzer = EmbeddingAnalyzer(min_cluster_size=3)
+        result = analyzer.analyze(_random_embeddings(20, dim=16))
+        assert result.originalities.min() >= 0.0
+        assert result.originalities.max() <= 1.0
+
+    def test_labels_contain_integers(self):
+        analyzer = EmbeddingAnalyzer(min_cluster_size=3)
+        result = analyzer.analyze(_random_embeddings(20, dim=16))
+        assert result.labels.dtype.kind == "i"
+
+
+# ---------------------------------------------------------------------------
+# TitleGenerator
+# ---------------------------------------------------------------------------
+
+class TestTitleGenerator:
+    def test_empty_docs_returns_default(self):
+        assert TitleGenerator().generate([]) == "New Section"
+
+    def test_single_doc_truncated(self):
+        title = TitleGenerator().generate(["A short idea"])
+        assert len(title) <= 41  # 40 chars + possible truncation marker
+
+    def test_multi_doc_returns_non_empty_string(self):
+        docs = [
+            "machine learning algorithms for image recognition",
+            "deep learning neural networks and computer vision",
+            "convolutional networks in image classification tasks",
         ]
-        
-        # Mock UMAP and LocalOutlierFactor
-        with patch('backend.data_similarity.umap.UMAP') as mock_umap:
-            with patch('backend.data_similarity.LocalOutlierFactor') as mock_lof:
-                # Setup mocks
-                mock_reducer = Mock()
-                mock_reducer.fit_transform.return_value = np.array([
-                    [0.1, 0.2],
-                    [0.3, 0.4],
-                    [0.5, 0.6]
-                ])
-                mock_umap.return_value = mock_reducer
-                
-                mock_lof_instance = Mock()
-                mock_lof_instance.negative_outlier_factor_ = np.array([-0.5, -0.6, -0.7])
-                mock_lof.return_value = mock_lof_instance
-                
-                # Call the method
-                result = self.data_similarity.generate_originality_score(embeddings)
-                
-                # Verify the result is a list of floats
-                assert isinstance(result, np.ndarray)
-                assert len(result) == 3
+        title = TitleGenerator().generate(docs)
+        assert isinstance(title, str)
+        assert len(title) > 0
 
-    def test_generate_synthetic_title(self):
-        """Test generate_synthetic_title method"""
-        # Test with empty list
-        result = self.data_similarity.generate_synthetic_title([])
-        assert result == "New Section"
-        
-        # Test with single document
-        result = self.data_similarity.generate_synthetic_title(["This is a test document"])
-        assert len(result) > 0
-        
-        # Test with multiple documents
-        cluster_docs = [
-            "Machine learning is powerful",
-            "Deep learning uses neural networks",
-            "Artificial intelligence is growing"
-        ]
-        result = self.data_similarity.generate_synthetic_title(cluster_docs)
-        assert len(result) > 0
+    def test_title_is_capitalised(self):
+        docs = ["alpha beta", "alpha gamma", "alpha delta"]
+        title = TitleGenerator().generate(docs)
+        # Every term should start with a capital letter
+        for word in title.split(" & "):
+            assert word[0].isupper(), f"'{word}' not capitalised in '{title}'"
 
-    def test_generate_synthetic_title_exception(self):
-        """Test generate_synthetic_title method with exception handling"""
-        # Mock TfidfVectorizer to raise an exception
-        with patch('backend.data_similarity.TfidfVectorizer') as mock_vectorizer:
-            mock_vectorizer.side_effect = Exception("Test exception")
-            
-            result = self.data_similarity.generate_synthetic_title(["test document"])
-            # Should return fallback title
-            assert "Section : test document" in result
-
-    @patch('backend.data_similarity.np')
-    def test__generate_toc_structure_base_case(self, mock_np):
-        """Test _generate_toc_structure method base case (small dataset)"""
-        # Mock numpy to return small array
-        mock_np.array.return_value = np.array([[0.1, 0.2, 0.3]])
-        mock_np.where.return_value = (np.array([0]),)
-        mock_np.unique.return_value = np.array([0])
-        
-        docs = ['doc1']
-        ids = ['id1']
-        embeddings = [[0.1, 0.2, 0.3]]
-        originalities = [0.5]
-        
-        with patch('backend.data_similarity.unformat_text') as mock_unformat:
-            mock_unformat.return_value = "Formatted text"
-            
-            result = self.data_similarity._generate_toc_structure(
-                docs, ids, embeddings, originalities, level=1, max_depth=3
-            )
-            
-            # Should return list of idea entries (base case)
-            assert isinstance(result, list)
-            assert len(result) == 1
-            assert result[0]['type'] == 'idea'
-            assert result[0]['id'] == 'id1'
+    def test_no_redundant_terms(self):
+        """Terms sharing a word should not both appear in the title."""
+        docs = ["hardware recommendation for pc", "hardware spec", "hardware build guide"]
+        title = TitleGenerator().generate(docs)
+        words_seen: set[str] = set()
+        for part in title.split(" & "):
+            for word in part.lower().split():
+                assert word not in words_seen, f"Redundant word '{word}' in '{title}'"
+                words_seen.add(word)
 
 
+# ---------------------------------------------------------------------------
+# TocTreeBuilder
+# ---------------------------------------------------------------------------
+
+class TestTocTreeBuilder:
+    def _make_builder(self) -> TocTreeBuilder:
+        return TocTreeBuilder(FakeAnalyzer(), TitleGenerator())
+
+    def test_small_dataset_returns_leaves(self):
+        """3 items < _MIN_LEAF_SIZE=3+1 → all leaves at top level."""
+        builder = self._make_builder()
+        data = _make_idea_data(n=3)
+        entries = builder.build(data, max_depth=3)
+        assert all(e.type == "idea" for e in entries)
+
+    def test_larger_dataset_creates_headings(self):
+        """With FakeAnalyzer, 10 items split into 2 clusters → headings."""
+        builder = self._make_builder()
+        data = _make_idea_data(n=10)
+        entries = builder.build(data, max_depth=2)
+        types = {e.type for e in entries}
+        assert "heading" in types
+
+    def test_originality_is_percentage_string(self):
+        builder = self._make_builder()
+        data = _make_idea_data(n=6)
+        entries = builder.build(data)
+
+        def check(nodes):
+            for node in nodes:
+                assert node.originality.endswith("%"), (
+                    f"Expected '%' suffix, got '{node.originality}'"
+                )
+                check(node.children)
+
+        check(entries)
+
+    def test_max_depth_respected(self):
+        """Headings should not exceed max_depth nesting."""
+        builder = self._make_builder()
+        data = _make_idea_data(n=20)
+        max_depth = 2
+
+        def max_heading_level(nodes: list[TocEntry]) -> int:
+            levels = [0]
+            for node in nodes:
+                if node.level is not None:
+                    levels.append(node.level)
+                levels.append(max_heading_level(node.children))
+            return max(levels)
+
+        entries = builder.build(data, max_depth=max_depth)
+        assert max_heading_level(entries) <= max_depth
+
+    def test_all_ids_present_in_tree(self):
+        """No idea should be lost or duplicated during tree construction."""
+        builder = self._make_builder()
+        data = _make_idea_data(n=10)
+        entries = builder.build(data)
+
+        def collect_ids(nodes: list[TocEntry]) -> list[str]:
+            result = []
+            for node in nodes:
+                if node.id is not None:
+                    result.append(node.id)
+                result.extend(collect_ids(node.children))
+            return result
+
+        found_ids = collect_ids(entries)
+        assert sorted(found_ids) == sorted(data.ids)
 
 
-class TestTocCache:
-    """Test cases for TOC cache functions"""
+# ---------------------------------------------------------------------------
+# DataSimilarity (integration-level with stubs)
+# ---------------------------------------------------------------------------
 
-    def setup_method(self):
-        """Set up test fixtures before each test method."""
-        # Set environment variable for cache path
-        self.cache_path = os.path.join(os.path.dirname(__file__), "test_toc_cache.json")
-        os.environ['TOC_CACHE_PATH'] = self.cache_path
+class TestDataSimilarity:
+    def _make_ds(self, n: int = 10) -> tuple[DataSimilarity, FakeCache, FakeRepository]:
+        data = _make_idea_data(n)
+        cache = FakeCache()
+        repo = FakeRepository(data)
+        analyzer = FakeAnalyzer()
+        builder = TocTreeBuilder(analyzer, TitleGenerator())
+        ds = DataSimilarity(
+            repository=repo,
+            cache=cache,
+            tree_builder=builder,
+        )
+        return ds, cache, repo
 
-    def teardown_method(self):
-        """Clean up after each test method."""
-        # Remove the cache file if it exists
-        if os.path.exists(self.cache_path):
-            os.remove(self.cache_path)
-
-    def test_save_toc_structure(self):
-        """Test save_toc_structure function"""
-        test_structure = [
-            {
-                'title': 'Test Section',
-                'type': 'heading',
-                'children': [
-                    {'title': 'Child 1', 'type': 'idea'}
-                ]
-            }
-        ]
-        
-        save_toc_structure(test_structure)
-        
-        # Verify the file was created
-        assert os.path.exists(self.cache_path)
-        
-        # Verify the content
-        with open(self.cache_path, 'r') as f:
-            content = f.read()
-            assert 'Test Section' in content
-
-    def test_load_toc_structure(self):
-        """Test load_toc_structure function"""
-        # First, save some test data
-        test_structure = [
-            {
-                'title': 'Test Section',
-                'type': 'heading',
-                'children': [
-                    {'title': 'Child 1', 'type': 'idea'}
-                ]
-            }
-        ]
-        save_toc_structure(test_structure)
-        
-        # Now load it
-        result = load_toc_structure()
-        
-        # Verify the result
-        assert result is not None
+    def test_generate_returns_list_of_dicts(self):
+        ds, _, _ = self._make_ds()
+        result = ds.generate_toc_structure()
         assert isinstance(result, list)
-        assert len(result) == 1
-        assert result[0]['title'] == 'Test Section'
+        assert all(isinstance(item, dict) for item in result)
 
-    def test_load_toc_structure_no_file(self):
-        """Test load_toc_structure when file doesn't exist"""
-        # Make sure the file doesn't exist
-        if os.path.exists(self.cache_path):
-            os.remove(self.cache_path)
-        
-        result = load_toc_structure()
-        assert result is None
+    def test_result_is_persisted_in_cache(self):
+        ds, cache, _ = self._make_ds()
+        result = ds.generate_toc_structure()
+        assert cache.load() == result
 
-    def test_load_toc_structure_corrupted(self):
-        """Test load_toc_structure with corrupted file"""
-        # Create a corrupted file
-        with open(self.cache_path, 'w') as f:
-            f.write('invalid json {{{{')
-        
-        result = load_toc_structure()
-        assert result is None
+    def test_load_toc_structure_returns_cached_value(self):
+        ds, cache, _ = self._make_ds()
+        ds.generate_toc_structure()
+        loaded = ds.load_toc_structure()
+        assert loaded is not None
+        assert isinstance(loaded, list)
+
+    def test_load_returns_none_before_generate(self):
+        ds, cache, _ = self._make_ds()
+        assert ds.load_toc_structure() is None
+
+    def test_result_contains_required_keys(self):
+        ds, _, _ = self._make_ds()
+        result = ds.generate_toc_structure()
+
+        def check_keys(nodes: list[dict]) -> None:
+            for node in nodes:
+                assert "title" in node
+                assert "type" in node
+                assert "originality" in node
+                check_keys(node.get("children", []))
+
+        check_keys(result)

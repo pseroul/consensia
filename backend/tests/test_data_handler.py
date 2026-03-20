@@ -141,7 +141,7 @@ class TestDataHandler:
         assert len(result) == 1
         assert result[0]['name'] == "test-tag"
     
-    def test_get_tags_from_idea(self):
+    def test_get_tags_from_idea(self) -> None:
         """Test get_tags_from_idea function"""
         init_database()
         
@@ -537,11 +537,11 @@ class TestDataHandler:
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
         
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
         
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)",
                       ("Idea without tags", "Content", user_id))
         conn.commit()
         conn.close()
@@ -551,3 +551,45 @@ class TestDataHandler:
         assert result[0]['title'] == "Idea without tags"
         # Tags should be empty string when no tags exist
         assert result[0]['tags'] == ''
+
+    def test_get_idea_from_tags(self) -> None:
+        """Test get_idea_from_tags function"""
+        init_database()
+        
+        # Insert test data
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+                      ("testuser", "test@example.com", "hashed_password"))
+        user_id = cursor.lastrowid
+        
+        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id))
+        idea_id = cursor.lastrowid
+        
+        cursor.execute("INSERT INTO tags (name) VALUES (?)", ("test-tag",))
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)",
+                      (idea_id, "test-tag"))
+        conn.commit()
+        conn.close()
+        
+        # Test with single tag
+        result = get_idea_from_tags("test-tag")
+        assert len(result) == 1
+        assert result[0]['title'] == "Test Idea"
+        
+        # Test with multiple tags (semicolon-separated)
+        result = get_idea_from_tags("test-tag")
+        assert len(result) == 1
+        
+        # Test with empty string (should return all ideas)
+        result = get_idea_from_tags("")
+        assert isinstance(result, list)
+
+    def test_get_idea_from_tags_nonexistent_tag(self) -> None:
+        """Test get_idea_from_tags with non-existent tag"""
+        init_database()
+        
+        # Test with non-existent tag (should return empty list)
+        result = get_idea_from_tags("nonexistent-tag")
+        assert len(result) == 0

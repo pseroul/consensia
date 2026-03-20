@@ -6,7 +6,7 @@ import uvicorn
 from authenticator import verify_access
 from fastapi.middleware.cors import CORSMiddleware
 from config import set_env_var
-from data_similarity import DataSimilarity, load_toc_structure
+from data_similarity import DataSimilarity
 import logging
 import os
 from fastapi.security import OAuth2PasswordBearer
@@ -533,12 +533,12 @@ async def get_toc_structure(current_user: dict = Depends(get_current_user)) -> l
     """
     
     try:
+        data_similarity = DataSimilarity()
         toc = None
-        toc =  load_toc_structure()
+        toc =  data_similarity.load_toc_structure()
         if toc: 
             return toc
         else: 
-            data_similarity = DataSimilarity()
             return data_similarity.generate_toc_structure()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}")

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(_backend_dir))
 sys.path.insert(0, os.path.abspath(_repo_root))
 
 # Mock out heavy ML dependencies that are not available in the test environment
-# (umap-learn, sentence-transformers, chromadb, sklearn). These are patched before
+# (umap-learn, sentence-transformers, chromadb, hdbscan). These are patched before
 # importing backend.main so the import chain does not fail during test collection.
 import unittest.mock as _mock
 
@@ -23,12 +23,8 @@ _ml_modules = [
     "chromadb",
     "chromadb.utils",
     "chromadb.utils.embedding_functions",
-    "sklearn",
-    "sklearn.cluster",
-    "sklearn.neighbors",
-    "sklearn.preprocessing",
-    "sklearn.feature_extraction",
-    "sklearn.feature_extraction.text",
+    "hdbscan",
+    "hdbscan.hdbscan_",
 ]
 for _mod in _ml_modules:
     if _mod not in sys.modules:
@@ -458,17 +454,19 @@ class TestMainAPI:
         assert "detail" in data
         assert "Invalid or expired code" in data["detail"]
 
-    @patch('backend.main.load_toc_structure')
     @patch('backend.main.DataSimilarity')
-    def test_get_toc_structure_from_cache(self, mock_data_similarity, mock_load_toc):
+    def test_get_toc_structure_from_cache(self, mock_data_similarity):
         """Test getting TOC structure from cache"""
         # Get authentication headers
         headers = self._get_auth_headers()
 
-        # Mock the load_toc_structure function to return cached data
-        mock_load_toc.return_value = [
+        # Mock the DataSimilarity instance
+        mock_instance = Mock()
+        mock_instance.load_toc_structure.return_value = [
             {"title": "Section 1", "type": "heading", "children": []}
         ]
+        mock_instance.generate_toc_structure.return_value = []
+        mock_data_similarity.return_value = mock_instance
 
         response = client.get("/toc/structure", headers=headers)
         assert response.status_code == 200
@@ -476,21 +474,19 @@ class TestMainAPI:
         assert len(data) == 1
         assert data[0]["title"] == "Section 1"
 
-        # Verify that DataSimilarity was not called (using cache)
-        mock_data_similarity.assert_not_called()
+        # Verify that load_toc_structure was called and generate_toc_structure was not
+        mock_instance.load_toc_structure.assert_called_once()
+        mock_instance.generate_toc_structure.assert_not_called()
 
-    @patch('backend.main.load_toc_structure')
     @patch('backend.main.DataSimilarity')
-    def test_get_toc_structure_generate_new(self, mock_data_similarity, mock_load_toc):
+    def test_get_toc_structure_generate_new(self, mock_data_similarity):
         """Test generating new TOC structure when cache is empty"""
         # Get authentication headers
         headers = self._get_auth_headers()
 
-        # Mock the load_toc_structure function to return None (no cache)
-        mock_load_toc.return_value = None
-
-        # Mock the DataSimilarity class
+        # Mock the DataSimilarity instance
         mock_instance = Mock()
+        mock_instance.load_toc_structure.return_value = None  # No cache
         mock_instance.generate_toc_structure.return_value = [
             {"title": "New Section", "type": "heading", "children": []}
         ]
@@ -502,8 +498,8 @@ class TestMainAPI:
         assert len(data) == 1
         assert data[0]["title"] == "New Section"
 
-        # Verify that DataSimilarity was called to generate new structure
-        mock_data_similarity.assert_called_once()
+        # Verify that both methods were called
+        mock_instance.load_toc_structure.assert_called_once()
         mock_instance.generate_toc_structure.assert_called_once()
 
     @patch('backend.main.DataSimilarity')
