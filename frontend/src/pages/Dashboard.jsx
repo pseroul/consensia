@@ -154,26 +154,44 @@ const Dashboard = () => {
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-4 justify-between items-center mb-8">
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
           <h1 className="text-2xl font-bold text-gray-800">Ideas</h1>
-          {/* Radio Button for filtering ideas */}
-          <div className="flex items-center gap-2 text-sm">
+          {/* Toggle for filtering ideas */}
+          <div className="flex items-center bg-gray-100 rounded-full p-1 text-sm shadow-inner">
             <input
               type="radio"
               id="allIdeas"
               name="ideaFilter"
               checked={!showMyIdeasOnly}
               onChange={() => setShowMyIdeasOnly(false)}
-              className="text-blue-600 focus:ring-blue-500"
+              className="sr-only"
             />
-            <label htmlFor="allIdeas" className="text-gray-600">All Ideas</label>
+            <label
+              htmlFor="allIdeas"
+              className={`px-4 py-1.5 rounded-full font-medium cursor-pointer transition-all duration-200 ${
+                !showMyIdeasOnly
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              All Ideas
+            </label>
             <input
               type="radio"
               id="myIdeas"
               name="ideaFilter"
               checked={showMyIdeasOnly}
               onChange={() => setShowMyIdeasOnly(true)}
-              className="text-blue-600 focus:ring-blue-500"
+              className="sr-only"
             />
-            <label htmlFor="myIdeas" className="text-gray-600">My Ideas</label>
+            <label
+              htmlFor="myIdeas"
+              className={`px-4 py-1.5 rounded-full font-medium cursor-pointer transition-all duration-200 ${
+                showMyIdeasOnly
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              My Ideas
+            </label>
           </div>
         </div>
 
