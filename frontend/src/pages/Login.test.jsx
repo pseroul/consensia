@@ -56,7 +56,6 @@ const fillForm = (email = 'user@test.com', otp = '123456') => {
   fireEvent.change(screen.getByLabelText('6-Digit Code'), { target: { value: otp } });
 };
 
-const submitForm = () => fireEvent.submit(screen.getByRole('form') ?? screen.getByLabelText(/verify/i) ?? document.querySelector('form'));
 
 // ══════════════════════════════════════════════════════════════════════════════
 describe('Login — rendering', () => {

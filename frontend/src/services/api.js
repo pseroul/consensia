@@ -41,26 +41,15 @@ api.interceptors.response.use(
 export const getIdeas = () => api.get('/ideas');
 export const getUserIdeas = () => api.get('/user/ideas');
 export const getIdeasFromTags = (tags) => api.get(`/ideas/tags/${tags}`);
-export const searchIdeas = (subname) => api.get(`/ideas/search/${subname}`);
-export const getDescription = (idea) => api.get(`/ideas/${idea}/description`);
 export const getTocStructure = () => api.get('/toc/structure');
 export const updateTocStructure = () => api.post('/toc/update');
 
 export const getTags = () => api.get('/tags');
-export const getIdeasTags = (idea) => api.get(`/ideas/${idea}/tags`);
 export const getSimilarIdeas = (idea) => api.get(`/ideas/similar/${idea}`);
 
 export const createIdea = (idea) => api.post('/ideas', idea);
-export const createTag = (tag) => api.post('/tags', tag);
-export const createRelation = (relation) => api.post('/relations', relation);
-
 export const updateIdea = (id, idea) => api.put(`/ideas/${id}`, idea);
 
 export const deleteIdea = (id, ideaData) => api.delete(`/ideas/${id}`, { data: ideaData });
 export const deleteTag = (name) => api.delete(`/tags/${name}`);
-export const deleteRelation = (relation) => api.delete(`/relations`, { data: relation });
-
 export const verifyOtp = (credentials) => api.post('/verify-otp', credentials);
-
-
-export default api;

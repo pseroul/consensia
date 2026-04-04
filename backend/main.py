@@ -12,14 +12,13 @@ import os
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
-
-logger = logging.getLogger("uvicorn.error")
-
 from data_handler import (
     init_database, get_ideas, get_user_ideas, get_idea_from_tags,
-    get_content, get_tags, get_tags_from_idea, add_idea, add_tag, 
+    get_content, get_tags, get_tags_from_idea, add_idea, add_tag,
     add_relation, remove_idea, remove_tag, remove_relation, update_idea, get_similar_idea
 )
+
+logger = logging.getLogger("uvicorn.error")
 
 # JWT Configuration
 SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'your-secret-key-here-change-in-production')
@@ -152,7 +151,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             raise credentials_exception
         return {"email": email}
     except JWTError:
-        raise credentials_exception
+        raise credentials_exception from None
 
 # GET endpoints
 @app.get("/ideas", response_model=List[IdeaItem])
@@ -169,8 +168,7 @@ async def get_all_ideas(current_user: dict = Depends(get_current_user)) -> List[
         ideas = get_ideas()
         return ideas
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving data: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error retrieving data: {str(e)}") from e
 @app.get("/user/ideas", response_model=List[IdeaItem])
 async def get_all_user_ideas(current_user: dict = Depends(get_current_user)) -> List[dict[Hashable, Any]]:
     """Get all ideas with optional limit.
@@ -193,8 +191,7 @@ async def get_all_user_ideas(current_user: dict = Depends(get_current_user)) -> 
         ideas = get_user_ideas(user_email)
         return ideas
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving data: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error retrieving data: {str(e)}") from e
 @app.get("/ideas/tags/{tags}", response_model=List[IdeaItem])
 async def get_ideas_by_tags(tags: str, current_user: dict = Depends(get_current_user)) -> List[dict[Hashable, str]]:
     """Get ideas by tags (semicolon separated).
@@ -213,8 +210,7 @@ async def get_ideas_by_tags(tags: str, current_user: dict = Depends(get_current_
         ideas = get_idea_from_tags(tags)
         return ideas
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving data by tags: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error retrieving data by tags: {str(e)}") from e
 @app.get("/ideas/search/{subname}", response_model=List[IdeaItem])
 async def search_ideas(subname: str, current_user: dict = Depends(get_current_user)) -> List[dict[Hashable, Any]]:
     """Search ideas by partial name.
@@ -233,8 +229,7 @@ async def search_ideas(subname: str, current_user: dict = Depends(get_current_us
         data = get_similar_idea(subname)
         return data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error searching data: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error searching data: {str(e)}") from e
 @app.get("/ideas/{idea_id}/content", response_model=str)
 async def get_idea_content(idea_id: int, current_user: dict = Depends(get_current_user)) -> str:
     """Get content of a specific idea.
@@ -253,8 +248,7 @@ async def get_idea_content(idea_id: int, current_user: dict = Depends(get_curren
         content = get_content(idea_id)
         return content
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving content: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error retrieving content: {str(e)}") from e
 @app.get("/tags", response_model=List[TagItem])
 async def get_all_tags(current_user: dict = Depends(get_current_user)) -> List[dict[Hashable, Any]]:
     """Get all tags.
@@ -272,8 +266,7 @@ async def get_all_tags(current_user: dict = Depends(get_current_user)) -> List[d
         tags = get_tags()
         return tags
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving tags: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error retrieving tags: {str(e)}") from e
 @app.get("/ideas/{idea_id}/tags", response_model=List[str])
 async def get_tags_for_idea(idea_id: int, current_user: dict = Depends(get_current_user)):
     """Get tags for a specific idea.
@@ -292,8 +285,7 @@ async def get_tags_for_idea(idea_id: int, current_user: dict = Depends(get_curre
         tags = get_tags_from_idea(idea_id)
         return tags
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving tags for data: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error retrieving tags for data: {str(e)}") from e
 @app.get("/ideas/similar/{idea}", response_model=List[IdeaItem])
 async def get_similar_ideas_endpoint(idea: str, current_user: dict = Depends(get_current_user)):
     """Get similar ideas based on semantic similarity.
@@ -314,8 +306,7 @@ async def get_similar_ideas_endpoint(idea: str, current_user: dict = Depends(get
         similar_data = get_similar_idea(idea)
         return similar_data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving similar ideas: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error retrieving similar ideas: {str(e)}") from e
 # POST endpoints
 @app.post("/ideas", response_model=dict)
 async def create_idea(data: IdeaItem, current_user: dict = Depends(get_current_user)) -> dict[str, str | int]:
@@ -351,8 +342,7 @@ async def create_idea(data: IdeaItem, current_user: dict = Depends(get_current_u
         
         return {"id": new_id}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error adding idea: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error adding idea: {str(e)}") from e
 @app.post("/tags", response_model=dict)
 async def create_tag(tag: TagItem, current_user: dict = Depends(get_current_user)) -> dict[str, str]:
     """Add a new tag.
@@ -371,8 +361,7 @@ async def create_tag(tag: TagItem, current_user: dict = Depends(get_current_user
         add_tag(tag.name)
         return {"message": f"Tag '{tag.name}' added successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error adding tag: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error adding tag: {str(e)}") from e
 @app.post("/relations", response_model=dict)
 async def create_relation(relation: RelationItem, current_user: dict = Depends(get_current_user)) -> dict[str, str]:
     """Create a relationship between data and tag.
@@ -391,8 +380,7 @@ async def create_relation(relation: RelationItem, current_user: dict = Depends(g
         add_relation(relation.idea_id, relation.tag_name)
         return {"message": f"Relation between '{relation.idea_id}' and '{relation.tag_name}' added successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating relation: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error creating relation: {str(e)}") from e
 # PUT endpoint
 @app.put("/ideas/{id}", response_model=dict)
 async def update_idea_item(id: int, idea: IdeaItem, current_user: dict = Depends(get_current_user)) -> dict[str, str]:
@@ -447,8 +435,7 @@ async def update_idea_item(id: int, idea: IdeaItem, current_user: dict = Depends
                     logger.info(f"Warning: Failed to process tag '{tag}': {str(e)}")
         return {"message": f"Idea '{id}' updated successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating idea: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error updating idea: {str(e)}") from e
 # DELETE endpoints
 @app.delete("/ideas/{id}", response_model=dict)
 async def delete_idea(id: int, idea: IdeaItem, current_user: dict = Depends(get_current_user)) -> dict[str, str]:
@@ -469,8 +456,7 @@ async def delete_idea(id: int, idea: IdeaItem, current_user: dict = Depends(get_
         remove_idea(id=id, title=idea.title)
         return {"message": f"Idea '{id}' removed successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error removing idea: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error removing idea: {str(e)}") from e
 @app.delete("/tags/{name}", response_model=dict)
 async def delete_tag(name: str, current_user: dict = Depends(get_current_user)) -> dict[str, str]:
     """Remove a tag.
@@ -489,8 +475,7 @@ async def delete_tag(name: str, current_user: dict = Depends(get_current_user)) 
         remove_tag(name)
         return {"message": f"Tag '{name}' removed successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error removing tag: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error removing tag: {str(e)}") from e
 @app.delete("/relations", response_model=dict)
 async def delete_relation(relation: RelationItem, current_user: dict = Depends(get_current_user)) -> dict[str, str]:
     """Remove a relationship between data and tag.
@@ -509,8 +494,7 @@ async def delete_relation(relation: RelationItem, current_user: dict = Depends(g
         remove_relation(relation.idea_id, relation.tag_name)
         return {"message": f"Relation between '{relation.idea_id}' and '{relation.tag_name}' removed successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error removing relation: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error removing relation: {str(e)}") from e
 # Health check endpoint
 @app.get("/health")
 async def health_check() -> dict[str, str]:
@@ -541,8 +525,7 @@ async def get_toc_structure(current_user: dict = Depends(get_current_user)) -> l
         else:
             return data_similarity.generate_toc_structure()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}")
-    
+        raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}") from e
 @app.post("/toc/update", response_model=dict)
 async def update_toc_structure(current_user: dict = Depends(get_current_user)) -> dict[str, str]:
     """Update the hierarchical table of contents structure
@@ -561,8 +544,7 @@ async def update_toc_structure(current_user: dict = Depends(get_current_user)) -
         data_similarity.generate_toc_structure()
         return {"message": "toc added successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}") from e
 @app.post("/verify-otp")
 def verify_otp(request: LoginRequest) -> dict[str, str]:
     """Verify the OTP code sent by React and return JWT token.

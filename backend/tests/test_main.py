@@ -812,7 +812,9 @@ class TestMainAPI:
                 with patch('backend.main.get_tags') as mock_get_tags:
                     # Mock the functions
                     mock_get_ideas.return_value = [{"id": 1, "title": "Test", "content": "Content", "tags": "tag1"}]
-                    mock_get_ideas_by_tags.return_value = [{"id": 1, "title": "Test", "content": "Content", "tags": "tag1"}]
+                    mock_get_ideas_by_tags.return_value = [
+                        {"id": 1, "title": "Test", "content": "Content", "tags": "tag1"}
+                    ]
                     mock_get_tags.return_value = [{"name": "tag1"}]
 
                     # Test GET /ideas
@@ -1008,7 +1010,7 @@ class TestEdgeCases:
 
         with patch('backend.main.add_idea') as mock_add_idea:
             with patch('backend.main.add_tag') as mock_add_tag:
-                with patch('backend.main.add_relation') as mock_add_relation:
+                with patch('backend.main.add_relation'):
                     mock_add_idea.return_value = 1
 
                     idea_data = {
@@ -1030,7 +1032,7 @@ class TestEdgeCases:
 
         with patch('backend.main.add_idea') as mock_add_idea:
             with patch('backend.main.add_tag') as mock_add_tag:
-                with patch('backend.main.add_relation') as mock_add_relation:
+                with patch('backend.main.add_relation'):
                     mock_add_idea.return_value = 1
 
                     idea_data = {
@@ -1052,7 +1054,7 @@ class TestEdgeCases:
 
         with patch('backend.main.add_idea') as mock_add_idea:
             with patch('backend.main.add_tag') as mock_add_tag:
-                with patch('backend.main.add_relation') as mock_add_relation:
+                with patch('backend.main.add_relation'):
                     mock_add_idea.return_value = 1
 
                     idea_data = {

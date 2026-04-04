@@ -1,4 +1,5 @@
-import { expect, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { expect, afterEach, vi } from 'vitest';
+import React from 'react';
 import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
 
@@ -29,12 +30,7 @@ vi.mock('react-router-dom', () => ({
   BrowserRouter: ({ children }) => children,
   Routes: ({ children }) => children,
   Route: ({ children }) => children,
-  Link: ({ to, children }) => {
-    const link = document.createElement('a');
-    link.href = to;
-    link.textContent = children;
-    return link;
-  },
+  Link: ({ to, children }) => React.createElement('a', { href: to }, children),
   useNavigate: () => vi.fn(),
   useParams: () => ({}),
   useLocation: () => ({}),
@@ -54,91 +50,28 @@ vi.mock('axios', () => ({
   })
 }));
 
-// Mock global Lucide React icons
+// Mock Lucide React icons — return null (valid React child, avoids SVGSVGElement errors in React 19)
 vi.mock('lucide-react', () => ({
   __esModule: true,
-  default: ({ size = 24, color = 'currentColor', ...props }) => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'icon');
-    svg.setAttribute('width', size);
-    svg.setAttribute('height', size);
-    svg.setAttribute('fill', 'currentColor');
-    Object.entries(props).forEach(([key, value]) => {
-      svg.setAttribute(key, value);
-    });
-    return svg;
-  },
-  // Mock specific icons that are used
-  Plus: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'plus-icon');
-    return svg;
-  },
-  X: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'x-icon');
-    return svg;
-  },
-  Search: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'search-icon');
-    return svg;
-  },
-  Home: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'home-icon');
-    return svg;
-  },
-  Settings: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'settings-icon');
-    return svg;
-  },
-  LogOut: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'logout-icon');
-    return svg;
-  },
-  Tag: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'tag-icon');
-    return svg;
-  },
-  Edit: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'edit-icon');
-    return svg;
-  },
-  Trash2: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'trash-icon');
-    return svg;
-  },
-  Check: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'check-icon');
-    return svg;
-  },
-  ChevronDown: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'chevron-down-icon');
-    return svg;
-  },
-  ChevronUp: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'chevron-up-icon');
-    return svg;
-  },
-  ChevronRight: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'chevron-right-icon');
-    return svg;
-  },
-  ChevronLeft: () => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-testid', 'chevron-left-icon');
-    return svg;
-  },
+  default:       () => null,
+  Plus:          () => null,
+  X:             () => null,
+  Menu:          () => null,
+  Lightbulb:     () => null,
+  User:          () => null,
+  Search:        () => null,
+  Home:          () => null,
+  Settings:      () => null,
+  LogOut:        () => null,
+  Tag:           () => null,
+  Edit:          () => null,
+  Trash2:        () => null,
+  Check:         () => null,
+  Loader2:       () => null,
+  ChevronDown:   () => null,
+  ChevronUp:     () => null,
+  ChevronRight:  () => null,
+  ChevronLeft:   () => null,
 }));
 
 // Mock localStorage

@@ -268,7 +268,6 @@ const TagsIdeasPage = () => {
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [tagToDelete, setTagToDelete] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
 
   /**
    * Fetch tags and their associated ideas from the API
@@ -403,7 +402,6 @@ const TagsIdeasPage = () => {
    */
   const confirmDeleteTag = async () => {
     try {
-      setIsDeleting(true);
       setError(null);
       await deleteTag(tagToDelete);
       // Refresh the tags list after deletion
@@ -413,8 +411,6 @@ const TagsIdeasPage = () => {
     } catch (err) {
       console.error('Error deleting tag:', err);
       setError('Failed to delete tag. Please try again.');
-    } finally {
-      setIsDeleting(false);
     }
   };
 

@@ -19,7 +19,7 @@ const Navbar = ({ isOpen: controlledIsOpen = false }) => {
     <nav className="bg-white border-b border-gray-200 fixed top-0 w-full z-[100] shadow-sm">
       <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
         {/* Logo / Titre */}
-        <div className="flex items-center gap-2 font-bold text-blue-600">
+        <div data-testid="logo" alt="Brainiac5 Logo" className="flex items-center gap-2 font-bold text-blue-600">
           <Lightbulb size={24} />
           <span>Consensia</span>
         </div>
@@ -63,7 +63,8 @@ const Navbar = ({ isOpen: controlledIsOpen = false }) => {
 
             <hr className="my-2 border-gray-100" />
 
-            <button 
+            <button
+              data-testid="logout-icon"
               onClick={handleLogout}
               className="flex items-center gap-3 p-3 rounded-xl hover:bg-red-50 text-red-500 font-bold transition-all"
             >

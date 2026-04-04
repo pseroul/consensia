@@ -7,6 +7,7 @@ const IdeaModal = ({ isOpen, onClose, onSave, initialData }) => {
   const [tags, setTags] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional: syncs form fields when modal opens or initialData changes */
   useEffect(() => {
     if (initialData) {
       setFormData({ title: initialData.title || '', content: initialData.content || '' });
@@ -23,6 +24,7 @@ const IdeaModal = ({ isOpen, onClose, onSave, initialData }) => {
       setTags([]);
     }
   }, [initialData, isOpen]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const addTag = (e) => {
     if (e.key === 'Enter' && currentTag.trim() !== '') {

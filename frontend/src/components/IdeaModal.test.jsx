@@ -109,11 +109,10 @@ describe('IdeaModal Component', () => {
     fireEvent.change(titleInput, { target: { value: 'Test Idea' } });
     fireEvent.change(contentInput, { target: { value: 'Test Content' } });
 
-    // Close the modal
-    const closeButton = screen.getByRole('button', { name: /close/i });
-    fireEvent.click(closeButton);
+    // Close the modal (parent controls isOpen)
+    rerender(<IdeaModal isOpen={false} onClose={mockOnClose} onSave={mockOnSave} />);
 
-    // Reopen the modal
+    // Reopen the modal — useEffect re-fires because isOpen changed
     rerender(<IdeaModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />);
 
     const newTitleInput = screen.getByLabelText('Title');

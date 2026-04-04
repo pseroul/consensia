@@ -6,8 +6,23 @@ markers = [
 ]
 
 [tool.ruff]
-select = ["E", "F", "B", "S"] # Error, Pyflakes, Bugbear, Bandit (Sécurité)
-fix = true
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "S"]
+ignore = [
+    "B008",  # FastAPI Depends() in route signatures is the required pattern
+    "S104",  # Binding to 0.0.0.0 is intentional for the server entrypoint
+    "S608",  # Parameterized IN-clause placeholders are not SQL injection vectors
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",  # assert is the standard pytest assertion mechanism
+    "S105",  # hardcoded strings in tests are test tokens/passwords, not secrets
+    "S106",  # same
+    "E402",  # env vars must be set before importing the app in test setup
+]
 
 [tool.vulture]
 min_confidence = 80

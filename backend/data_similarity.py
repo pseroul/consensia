@@ -433,7 +433,7 @@ class TocTreeBuilder:
                 id=id_,
                 originality=TocTreeBuilder._fmt_pct(float(orig)),
             )
-            for doc, id_, orig in zip(docs, ids, originalities)
+            for doc, id_, orig in zip(docs, ids, originalities, strict=False)
         ]
 
     @staticmethod

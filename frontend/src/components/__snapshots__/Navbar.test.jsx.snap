@@ -9,23 +9,17 @@ exports[`Navbar Component > matches snapshot 1`] = `
       class="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center"
     >
       <div
+        alt="Brainiac5 Logo"
         class="flex items-center gap-2 font-bold text-blue-600"
+        data-testid="logo"
       >
-        <svg
-          alt="Brainiac5 Logo"
-          data-testid="logo"
-        />
         <span>
           Consensia
         </span>
       </div>
       <button
         class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
-      >
-        <svg
-          data-testid="menu-icon"
-        />
-      </button>
+      />
     </div>
   </nav>
 </DocumentFragment>

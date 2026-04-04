@@ -8,10 +8,12 @@ logger = logging.getLogger("uvicorn.error")
 def set_env_var() -> None:
     """Set all configuration variables as environment variables."""
     try:
-        # Set all config variables as environment variables
-        os.environ['CHROMA_DB'] = os.path.join(os.path.dirname(__file__), "data", "embeddings")
-        os.environ['NAME_DB'] = os.path.join(os.path.dirname(__file__), "data", "knowledge.db")
-        os.environ['TOC_CACHE_PATH'] = os.path.join(os.path.dirname(__file__), "data", "toc.json")
+        # Set all config variables as environment variables.
+        # Use setdefault so that values pre-set by tests (or the host environment)
+        # are not overwritten.
+        os.environ.setdefault('CHROMA_DB', os.path.join(os.path.dirname(__file__), "data", "embeddings"))
+        os.environ.setdefault('NAME_DB', os.path.join(os.path.dirname(__file__), "data", "knowledge.db"))
+        os.environ.setdefault('TOC_CACHE_PATH', os.path.join(os.path.dirname(__file__), "data", "toc.json"))
         
         # Load origins from site.json
         site_json_path = os.path.join(os.path.dirname(__file__), "data", "site.json")
