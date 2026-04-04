@@ -1,8 +1,7 @@
 import sys
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import pytest
-import pandas as pd
 import sqlite3
 
 # Add the backend directory to the path so we can import data_handler
@@ -27,19 +26,20 @@ from backend.data_handler import (
     embed_all_ideas
 )
 
+@pytest.mark.unit
 class TestDataHandler:
     """Test cases for data_handler functions"""
     
     def setup_method(self):
         """Set up test fixtures before each test method."""
-        # Create a temporary database for testing
-        self.test_db = os.path.join(os.path.dirname(__file__), "test_database.db")
-        print("test_db:", self.test_db)
+        import tempfile
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.test_db = self._tmp.name
+        self._tmp.close()
         os.environ["NAME_DB"] = self.test_db
-        
+
     def teardown_method(self):
         """Clean up after each test method."""
-        # Remove the test database file
         if os.path.exists(self.test_db):
             os.remove(self.test_db)
     

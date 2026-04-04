@@ -1,8 +1,7 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import IdeaModal from './IdeaModal';
-import { useState } from 'react';
 
 describe('IdeaModal Component', () => {
   const mockOnClose = vi.fn();
@@ -10,13 +9,6 @@ describe('IdeaModal Component', () => {
   
   beforeEach(() => {
     vi.clearAllMocks();
-    
-    // Mock lucide-react icons
-    vi.mock('lucide-react', () => ({
-      X: () => <svg data-testid="x-icon" />,
-      Tag: () => <svg data-testid="tag-icon" />,
-      Loader2: () => <svg data-testid="loader-icon" />,
-    }));
   });
 
   it('renders the modal when isOpen is true', () => {
@@ -110,24 +102,133 @@ describe('IdeaModal Component', () => {
 
   it('clears form when modal is closed', () => {
     const { rerender } = render(<IdeaModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />);
-    
+
     const titleInput = screen.getByLabelText('Title');
     const contentInput = screen.getByLabelText('Content');
-    
+
     fireEvent.change(titleInput, { target: { value: 'Test Idea' } });
     fireEvent.change(contentInput, { target: { value: 'Test Content' } });
-    
+
     // Close the modal
     const closeButton = screen.getByRole('button', { name: /close/i });
     fireEvent.click(closeButton);
-    
+
     // Reopen the modal
     rerender(<IdeaModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />);
-    
+
     const newTitleInput = screen.getByLabelText('Title');
     const newContentInput = screen.getByLabelText('Content');
-    
+
     expect(newTitleInput).toHaveValue('');
     expect(newContentInput).toHaveValue('');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Tag logic tests
+  // ---------------------------------------------------------------------------
+
+  it('renders tag chips from semicolon-separated initialData.tags', () => {
+    render(
+      <IdeaModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        initialData={{ title: 'T', content: 'C', tags: 'ml;python' }}
+      />
+    );
+
+    expect(screen.getByText('#ml')).toBeInTheDocument();
+    expect(screen.getByText('#python')).toBeInTheDocument();
+  });
+
+  it('adds a tag chip when Enter is pressed in the tag input', async () => {
+    render(<IdeaModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />);
+
+    const tagInput = screen.getByPlaceholderText('Ajouter un tag...');
+    await userEvent.type(tagInput, 'newtag');
+    fireEvent.keyDown(tagInput, { key: 'Enter', code: 'Enter' });
+
+    expect(screen.getByText('#newtag')).toBeInTheDocument();
+    expect(tagInput).toHaveValue('');
+  });
+
+  it('does not add a duplicate tag', async () => {
+    render(<IdeaModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />);
+
+    const tagInput = screen.getByPlaceholderText('Ajouter un tag...');
+    await userEvent.type(tagInput, 'dup');
+    fireEvent.keyDown(tagInput, { key: 'Enter', code: 'Enter' });
+    await userEvent.type(tagInput, 'dup');
+    fireEvent.keyDown(tagInput, { key: 'Enter', code: 'Enter' });
+
+    const chips = screen.getAllByText('#dup');
+    expect(chips).toHaveLength(1);
+  });
+
+  it('removes a tag chip when its × button is clicked', async () => {
+    render(<IdeaModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />);
+
+    const tagInput = screen.getByPlaceholderText('Ajouter un tag...');
+    await userEvent.type(tagInput, 'removeme');
+    fireEvent.keyDown(tagInput, { key: 'Enter', code: 'Enter' });
+
+    expect(screen.getByText('#removeme')).toBeInTheDocument();
+
+    // The × button is inside the chip span — click the only remove button
+    const removeButton = screen.getByText('#removeme').parentElement.querySelector('button');
+    fireEvent.click(removeButton);
+
+    expect(screen.queryByText('#removeme')).not.toBeInTheDocument();
+  });
+
+  it('serializes tags as semicolon-joined string in the onSave payload', async () => {
+    render(<IdeaModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />);
+
+    const titleInput = screen.getByLabelText('Title');
+    const contentInput = screen.getByLabelText('Content');
+    const tagInput = screen.getByPlaceholderText('Ajouter un tag...');
+
+    fireEvent.change(titleInput, { target: { value: 'My Idea' } });
+    fireEvent.change(contentInput, { target: { value: 'Some content' } });
+
+    await userEvent.type(tagInput, 'alpha');
+    fireEvent.keyDown(tagInput, { key: 'Enter', code: 'Enter' });
+    await userEvent.type(tagInput, 'beta');
+    fireEvent.keyDown(tagInput, { key: 'Enter', code: 'Enter' });
+
+    fireEvent.submit(screen.getByRole('form'));
+
+    expect(mockOnSave).toHaveBeenCalledWith(
+      expect.objectContaining({ tags: 'alpha;beta' })
+    );
+  });
+
+  it('prefills title and content in edit mode (initialData provided)', () => {
+    render(
+      <IdeaModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        initialData={{ title: 'Existing Idea', content: 'Existing content', tags: '' }}
+      />
+    );
+
+    expect(screen.getByLabelText('Title')).toHaveValue('Existing Idea');
+    expect(screen.getByLabelText('Content')).toHaveValue('Existing content');
+    expect(screen.getByText("Modifier l\u2019id\u00e9e")).toBeInTheDocument();
+  });
+
+  it('shows Update button (not Save) in edit mode', () => {
+    render(
+      <IdeaModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        initialData={{ title: 'T', content: 'C', tags: '' }}
+      />
+    );
+
+    expect(screen.getByText('Update')).toBeInTheDocument();
+    expect(screen.queryByText('Save')).not.toBeInTheDocument();
   });
 });

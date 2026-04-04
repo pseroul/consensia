@@ -1,6 +1,6 @@
 import sys
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import pytest
 import sqlite3
 
@@ -12,41 +12,26 @@ _repo_root = os.path.join(_tests_dir, '../..')
 sys.path.insert(0, os.path.abspath(_backend_dir))
 sys.path.insert(0, os.path.abspath(_repo_root))
 
-# Mock out heavy ML dependencies that are not available in the test environment
-# (umap-learn, sentence-transformers, chromadb, hdbscan). These are patched before
-# importing backend.main so the import chain does not fail during test collection.
-import unittest.mock as _mock
-
-_ml_modules = [
-    "umap", "umap.umap_",
-    "sentence_transformers",
-    "chromadb",
-    "chromadb.utils",
-    "chromadb.utils.embedding_functions",
-    "hdbscan",
-    "hdbscan.hdbscan_",
-]
-for _mod in _ml_modules:
-    if _mod not in sys.modules:
-        sys.modules[_mod] = _mock.MagicMock()
-
 # Provide a valid database path before importing backend.main, because main.py calls
 # init_database() at module level and needs NAME_DB to be set.
 os.environ.setdefault("NAME_DB", os.path.join(os.path.abspath(_tests_dir), "test_main_database.db"))
 
 from fastapi.testclient import TestClient
-from backend.main import app, get_db, IdeaItem, TagItem, RelationItem, LoginRequest
+from backend.main import app, get_db
 
 client = TestClient(app)
 
 
+@pytest.mark.unit
 class TestMainAPI:
     """Test cases for the main API endpoints"""
 
     def setup_method(self):
         """Set up test fixtures before each test method."""
-        # Create a temporary database for testing
-        self.test_db = os.path.join(os.path.dirname(__file__), "test_main_database.db")
+        import tempfile
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.test_db = self._tmp.name
+        self._tmp.close()
         os.environ["NAME_DB"] = self.test_db
 
         # Initialize the database
@@ -63,7 +48,6 @@ class TestMainAPI:
 
     def teardown_method(self):
         """Clean up after each test method."""
-        # Remove the test database file
         if os.path.exists(self.test_db):
             os.remove(self.test_db)
 
@@ -264,7 +248,7 @@ class TestMainAPI:
         mock_add_idea.return_value = 1
 
         # Create a JWT token without email (malformed token)
-        from backend.main import create_access_token, SECRET_KEY, ALGORITHM
+        from backend.main import SECRET_KEY, ALGORITHM
         from jose import jwt
         from datetime import datetime, timedelta
         
@@ -685,9 +669,8 @@ class TestMainAPI:
 
     def test_jwt_token_expiration(self):
         """Test JWT token expiration"""
-        from backend.main import create_access_token, get_current_user
-        from datetime import datetime, timedelta
-        from jose import jwt
+        from backend.main import create_access_token
+        from datetime import timedelta
 
         # Create a token that expired 1 hour ago
         expired_token = create_access_token(
@@ -786,7 +769,7 @@ class TestMainAPI:
         assert "exp" in payload
 
         # Verify expiration time is reasonable (within next 90 minutes to account for test timing)
-        expire_time = datetime.fromtimestamp(payload["exp"])
+        expire_time = datetime.utcfromtimestamp(payload["exp"])
         time_diff = expire_time - datetime.utcnow()
         assert time_diff.total_seconds() > 0  # Token should not be expired
         assert time_diff.total_seconds() < 5400  # Token should expire within 90 minutes

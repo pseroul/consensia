@@ -536,9 +536,9 @@ async def get_toc_structure(current_user: dict = Depends(get_current_user)) -> l
         data_similarity = DataSimilarity()
         toc = None
         toc =  data_similarity.load_toc_structure()
-        if toc: 
+        if toc is not None:
             return toc
-        else: 
+        else:
             return data_similarity.generate_toc_structure()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}")
@@ -559,7 +559,7 @@ async def update_toc_structure(current_user: dict = Depends(get_current_user)) -
     try:
         data_similarity = DataSimilarity()
         data_similarity.generate_toc_structure()
-        return {"message": f"toc added successfully"}
+        return {"message": "toc added successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}")
 

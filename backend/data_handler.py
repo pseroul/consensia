@@ -105,7 +105,7 @@ def get_ideas() -> list[dict[Hashable, Any]]:
         list[dict[Hashable, Any]]: List of dictionaries containing all ideas
     """
     conn = sqlite3.connect(os.getenv('NAME_DB'))
-    query = f"""
+    query = """
     SELECT 
         i.id, 
         i.title, 
@@ -138,7 +138,7 @@ def get_user_ideas(user_email: str) -> list[dict[Hashable, Any]]:
         list[dict[Hashable, Any]]: List of dictionaries containing all ideas
     """
     conn = sqlite3.connect(os.getenv('NAME_DB'))
-    query = f"""
+    query = """
     SELECT 
         i.id, 
         i.title, 
@@ -361,7 +361,7 @@ def add_relation(idea_id: int, tag_name: str) -> None:
         conn.commit()
         logger.info(f"Relation between '{idea_id}' and '{tag_name}'  added successfully.")
     except sqlite3.IntegrityError:
-        logger.info(f"Error : This relation already exists or foreign keys are unvalid.")
+        logger.info("Error : This relation already exists or foreign keys are unvalid.")
     finally:
         conn.close()
 

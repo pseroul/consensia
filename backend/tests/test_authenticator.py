@@ -1,6 +1,6 @@
 import sys
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import pytest
 import sqlite3
 
@@ -11,21 +11,21 @@ from backend.authenticator import generate_auth_link, verify_access
 from backend.data_handler import init_database
 
 
+@pytest.mark.unit
 class TestAuthenticator:
     """Test cases for authenticator functions"""
 
     def setup_method(self):
         """Set up test fixtures before each test method."""
-        # Set environment variable for database path
-        self.test_db_path = os.path.join(os.path.dirname(__file__), "test_knowledge.db")
+        import tempfile
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.test_db_path = self._tmp.name
+        self._tmp.close()
         os.environ['NAME_DB'] = self.test_db_path
-        
-        # Initialize test database
         init_database()
 
     def teardown_method(self):
         """Clean up after each test method."""
-        # Remove the test database file if it exists
         if os.path.exists(self.test_db_path):
             os.remove(self.test_db_path)
 

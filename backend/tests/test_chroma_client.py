@@ -1,5 +1,6 @@
 import sys
 import os
+import pytest
 from unittest.mock import Mock, patch
 
 # Add the backend directory to the path so we can import chroma_client
@@ -7,6 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from backend.chroma_client import ChromaClient
 
+@pytest.mark.unit
 class TestChromaClient:
     """Test cases for ChromaClient class"""
     
@@ -21,8 +23,6 @@ class TestChromaClient:
     
     def test_init(self):
         """Test ChromaClient initialization"""
-        # Setup the client manually for this test
-        self.setup_method()
         assert hasattr(self.chroma_client, 'client')
         assert hasattr(self.chroma_client, 'emb_fn')
         assert hasattr(self.chroma_client, 'collection')
@@ -30,8 +30,6 @@ class TestChromaClient:
     
     def test_insert_idea(self):
         """Test insert_idea method"""
-        # Setup the client manually for this test
-        self.setup_method()
         # Test that insert_idea calls collection.add with correct parameters
         self.chroma_client.insert_idea("Test Idea", "This is a test description", [])
         
@@ -46,8 +44,6 @@ class TestChromaClient:
     
     def test_update_idea(self):
         """Test update_idea method"""
-        # Setup the client manually for this test
-        self.setup_method()
         # Test that update_idea calls collection.update with correct parameters
         self.chroma_client.update_idea("Updated Idea", "This is an updated description", [])
         
@@ -62,8 +58,6 @@ class TestChromaClient:
     
     def test_remove_idea(self):
         """Test remove_idea method"""
-        # Setup the client manually for this test
-        self.setup_method()
         # Test that remove_idea calls collection.delete with correct parameters
         self.chroma_client.remove_idea('Idea removed')
         
@@ -76,8 +70,6 @@ class TestChromaClient:
     
     def test_get_similar_idea(self):
         """Test get_similar_idea method"""
-        # Setup the client manually for this test
-        self.setup_method()
         # Mock the collection.query response
         mock_results = {
             'ids': [['Idea 1', 'Idea 2']],
@@ -104,8 +96,6 @@ class TestChromaClient:
     
     def test_get_all_ideas(self):
         """Test get_all_data method"""
-        # Setup the client manually for this test
-        self.setup_method()
         # Mock the collection.get response
         mock_result = Mock()
         self.mock_collection.get.return_value = mock_result

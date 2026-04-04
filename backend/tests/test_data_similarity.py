@@ -82,6 +82,7 @@ class FakeAnalyzer:
 # TocEntry
 # ---------------------------------------------------------------------------
 
+@pytest.mark.unit
 class TestTocEntry:
     def test_leaf_to_dict_contains_required_fields(self):
         entry = TocEntry(
@@ -116,6 +117,7 @@ class TestTocEntry:
 # FileTocCache
 # ---------------------------------------------------------------------------
 
+@pytest.mark.unit
 class TestFileTocCache:
     def test_raises_when_no_path_configured(self, monkeypatch):
         monkeypatch.delenv("TOC_CACHE_PATH", raising=False)
@@ -145,6 +147,7 @@ class TestFileTocCache:
 # EmbeddingAnalyzer
 # ---------------------------------------------------------------------------
 
+@pytest.mark.unit
 class TestEmbeddingAnalyzer:
     def test_small_dataset_fallback(self):
         """Fewer than 2*min_cluster_size points → all originalities == 1."""
@@ -177,6 +180,7 @@ class TestEmbeddingAnalyzer:
 # TitleGenerator
 # ---------------------------------------------------------------------------
 
+@pytest.mark.unit
 class TestTitleGenerator:
     def test_empty_docs_returns_default(self):
         assert TitleGenerator().generate([]) == "New Section"
@@ -217,6 +221,7 @@ class TestTitleGenerator:
 # TocTreeBuilder
 # ---------------------------------------------------------------------------
 
+@pytest.mark.unit
 class TestTocTreeBuilder:
     def _make_builder(self) -> TocTreeBuilder:
         return TocTreeBuilder(FakeAnalyzer(), TitleGenerator())
@@ -289,6 +294,7 @@ class TestTocTreeBuilder:
 # DataSimilarity (integration-level with stubs)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.unit
 class TestDataSimilarity:
     def _make_ds(self, n: int = 10) -> tuple[DataSimilarity, FakeCache, FakeRepository]:
         data = _make_idea_data(n)

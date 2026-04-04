@@ -1,5 +1,9 @@
 [tool.pytest.ini_options]
 addopts = "--cov=. --cov-report=term-missing --cov-fail-under=80"
+markers = [
+    "unit: fast unit tests with all external dependencies mocked",
+    "integration: full lifecycle tests using real SQLite and FakeChromaClient",
+]
 
 [tool.ruff]
 select = ["E", "F", "B", "S"] # Error, Pyflakes, Bugbear, Bandit (Sécurité)

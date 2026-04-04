@@ -141,21 +141,6 @@ vi.mock('lucide-react', () => ({
   },
 }));
 
-// Mock global React hooks
-vi.mock('react', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    useState: vi.fn().mockImplementation((init) => [init, vi.fn()]),
-    useEffect: vi.fn().mockImplementation((fn) => fn()),
-    useContext: vi.fn().mockImplementation((context) => context._currentValue),
-    useReducer: vi.fn().mockImplementation((reducer, initialState) => [initialState, vi.fn()]),
-    useMemo: vi.fn().mockImplementation((fn) => fn()),
-    useCallback: vi.fn().mockImplementation((fn) => fn),
-    useRef: vi.fn().mockImplementation(() => ({ current: null })),
-  };
-});
-
 // Mock localStorage
 const localStorageMock = (() => {
   let store = {};
@@ -228,7 +213,6 @@ console.error = (...args) => {
   // Ignore specific warnings that are not important for testing
   const ignorePatterns = [
     /Warning: ReactDOM.render is no longer supported in React 18/,
-    /Warning: Invalid hook call/,
     /Warning: Each child in a list should have a unique "key" prop/,
   ];
   
