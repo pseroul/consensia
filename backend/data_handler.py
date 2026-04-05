@@ -684,10 +684,23 @@ def get_book_authors(book_id: int) -> list[dict[Any, Any]]:
     return df.to_dict("records")
 
 
+def get_users() -> list[dict[Any, Any]]:
+    """
+    Retrieve all users from the database.
+
+    Returns:
+        list[dict]: List of user dicts containing id, username, and email
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    df = pd.read_sql_query("SELECT id, username, email FROM users", conn)
+    conn.close()
+    return df.to_dict("records")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Regenerate all embeddings')
     parser.add_argument('-e', '--embedding', help='regenerate embeddings for chromadb', action="store_true")
     args = parser.parse_args()
     set_env_var()
-    if args.embedding: 
+    if args.embedding:
         embed_all_ideas()

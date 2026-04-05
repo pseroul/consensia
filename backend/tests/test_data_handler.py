@@ -30,6 +30,7 @@ from backend.data_handler import (
     add_book_author,
     remove_book_author,
     get_book_authors,
+    get_users,
 )
 
 @pytest.mark.unit
@@ -748,3 +749,36 @@ class TestDataHandler:
         assert len(result) == 2
         emails = {a["email"] for a in result}
         assert emails == {"alice@example.com", "bob@example.com"}
+
+    def test_get_users_returns_all_users(self) -> None:
+        """get_users returns all registered users with id, username, email."""
+        init_database()
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("alice", "alice@example.com", "secret1"),
+        )
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("bob", "bob@example.com", "secret2"),
+        )
+        conn.commit()
+        conn.close()
+
+        result = get_users()
+        assert len(result) == 2
+        emails = {u["email"] for u in result}
+        assert "alice@example.com" in emails
+        assert "bob@example.com" in emails
+        for u in result:
+            assert "id" in u
+            assert "username" in u
+            assert "email" in u
+            assert "hashed_password" not in u
+
+    def test_get_users_empty(self) -> None:
+        """get_users returns an empty list when no users exist."""
+        init_database()
+        result = get_users()
+        assert result == []

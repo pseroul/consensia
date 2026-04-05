@@ -16,7 +16,8 @@ from data_handler import (
     init_database, get_ideas, get_user_ideas, get_idea_from_tags,
     get_content, get_tags, get_tags_from_idea, add_idea, add_tag,
     add_relation, remove_idea, remove_tag, remove_relation, update_idea, get_similar_idea,
-    add_book, get_books, remove_book, add_book_author, remove_book_author, get_book_authors
+    add_book, get_books, remove_book, add_book_author, remove_book_author, get_book_authors,
+    get_users
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -618,6 +619,19 @@ async def delete_book_author(item: BookAuthorItem, current_user: dict = Depends(
         return {"message": f"User '{item.user_id}' removed from authors of book '{item.book_id}'"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error removing book author: {str(e)}") from e
+
+
+@app.get("/users", response_model=List[dict])
+async def get_all_users(current_user: dict = Depends(get_current_user)) -> List[dict]:
+    """List all registered users (id, username, email).
+
+    Returns:
+        List[dict]: List of user dicts.
+    """
+    try:
+        return get_users()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving users: {str(e)}") from e
 
 
 # Health check endpoint

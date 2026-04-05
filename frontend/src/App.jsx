@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import TableOfContents from './pages/TableOfContents';
 import TagsIdeasPage from './pages/TagsIdeasPage';
 import Navbar from './components/Navbar';
+import BooksPage from './pages/BooksPage';
 import { BookProvider } from './contexts/BookContext';
 
 const ProtectedRoute = ({ children }) => {
@@ -46,13 +47,22 @@ function App() {
               } 
             />
 
-            <Route 
-              path="/tags-ideas" 
+            <Route
+              path="/tags-ideas"
               element={
                 <ProtectedRoute>
                   <TagsIdeasPage />
                 </ProtectedRoute>
-              } 
+              }
+            />
+
+            <Route
+              path="/books"
+              element={
+                <ProtectedRoute>
+                  <BooksPage />
+                </ProtectedRoute>
+              }
             />
 
             {/* Redirection si l'URL n'existe pas */}

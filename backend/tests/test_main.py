@@ -1526,3 +1526,69 @@ class TestBookAPI:
         )
         assert response.status_code == 500
         assert "Error removing book author" in response.json()["detail"]
+
+
+@pytest.mark.unit
+class TestUsersAPI:
+    """Unit tests for the GET /users endpoint."""
+
+    def setup_method(self):
+        import tempfile
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.test_db = self._tmp.name
+        self._tmp.close()
+        os.environ["NAME_DB"] = self.test_db
+        from backend.data_handler import init_database
+        init_database()
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("testuser", "test@example.com", "hashed_password"),
+        )
+        conn.commit()
+        conn.close()
+
+    def teardown_method(self):
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
+
+    def _get_auth_headers(self):
+        login_data = {"email": "test@example.com", "otp_code": "123456"}
+        with patch("backend.main.verify_access", return_value=True):
+            response = client.post("/verify-otp", json=login_data)
+        return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+    @patch("backend.main.get_users")
+    def test_get_all_users_returns_list(self, mock_get_users):
+        mock_get_users.return_value = [
+            {"id": 1, "username": "alice", "email": "alice@example.com"},
+            {"id": 2, "username": "bob",   "email": "bob@example.com"},
+        ]
+        headers = self._get_auth_headers()
+        response = client.get("/users", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["username"] == "alice"
+        assert data[1]["email"] == "bob@example.com"
+
+    @patch("backend.main.get_users")
+    def test_get_all_users_empty(self, mock_get_users):
+        mock_get_users.return_value = []
+        headers = self._get_auth_headers()
+        response = client.get("/users", headers=headers)
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_get_all_users_requires_auth(self):
+        response = client.get("/users")
+        assert response.status_code == 401
+
+    @patch("backend.main.get_users")
+    def test_get_all_users_error_handling(self, mock_get_users):
+        mock_get_users.side_effect = Exception("DB failure")
+        headers = self._get_auth_headers()
+        response = client.get("/users", headers=headers)
+        assert response.status_code == 500
+        assert "Error retrieving users" in response.json()["detail"]

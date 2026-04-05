@@ -55,3 +55,9 @@ export const deleteTag = (name) => api.delete(`/tags/${name}`);
 export const verifyOtp = (credentials) => api.post('/verify-otp', credentials);
 
 export const getBooks = () => api.get('/books');
+export const createBook = (book) => api.post('/books', book);
+export const deleteBook = (id) => api.delete(`/books/${id}`);
+export const getBookAuthors = (bookId) => api.get(`/books/${bookId}/authors`);
+export const addBookAuthor = (bookId, userId) => api.post('/book-authors', { book_id: bookId, user_id: userId });
+export const removeBookAuthor = (bookId, userId) => api.delete('/book-authors', { data: { book_id: bookId, user_id: userId } });
+export const getUsers = () => api.get('/users');
