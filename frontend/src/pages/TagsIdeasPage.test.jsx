@@ -47,6 +47,11 @@ vi.mock('react-router-dom', async (importOriginal) => {
   };
 });
 
+// ─── Mock BookContext ─────────────────────────────────────────────────────────
+vi.mock('../contexts/BookContext', () => ({
+  useBook: () => ({ selectedBook: null, books: [], setSelectedBook: vi.fn() }),
+}));
+
 // ─── Mock API ─────────────────────────────────────────────────────────────────
 vi.mock('../services/api', () => ({
   getTags:          vi.fn(),

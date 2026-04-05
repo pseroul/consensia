@@ -53,3 +53,5 @@ export const updateIdea = (id, idea) => api.put(`/ideas/${id}`, idea);
 export const deleteIdea = (id, ideaData) => api.delete(`/ideas/${id}`, { data: ideaData });
 export const deleteTag = (name) => api.delete(`/tags/${name}`);
 export const verifyOtp = (credentials) => api.post('/verify-otp', credentials);
+
+export const getBooks = () => api.get('/books');

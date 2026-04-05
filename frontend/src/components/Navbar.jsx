@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X, LogOut, Lightbulb, Home, Settings, User, Tag } from 'lucide-react';
+import BookSelector from './BookSelector';
 
 const Navbar = ({ isOpen: controlledIsOpen = false }) => {
   const [isOpen, setIsOpen] = useState(controlledIsOpen);
@@ -24,8 +25,11 @@ const Navbar = ({ isOpen: controlledIsOpen = false }) => {
           <span>Consensia</span>
         </div>
 
+        {/* Book selector */}
+        <BookSelector />
+
         {/* Bouton Menu (Burger) */}
-        <button 
+        <button
           onClick={toggleMenu}
           className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
         >

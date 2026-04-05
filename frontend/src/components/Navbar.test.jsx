@@ -1,6 +1,10 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Navbar from './Navbar';
+
+vi.mock('./BookSelector', () => ({
+  default: () => <div data-testid="book-selector-stub" />,
+}));
 
 describe('Navbar Component', () => {
   beforeEach(() => {

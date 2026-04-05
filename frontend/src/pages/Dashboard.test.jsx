@@ -36,6 +36,12 @@ vi.mock('lucide-react', () => {
   };
 });
 
+// ─── Mock BookContext ─────────────────────────────────────────────────────────
+let mockSelectedBook = null;
+vi.mock('../contexts/BookContext', () => ({
+  useBook: () => ({ selectedBook: mockSelectedBook, books: [], setSelectedBook: vi.fn() }),
+}));
+
 // ─── Mock API services ────────────────────────────────────────────────────────
 vi.mock('../services/api', () => ({
   getIdeas: vi.fn(),
@@ -70,13 +76,13 @@ import { getIdeas, getUserIdeas, createIdea, updateIdea, deleteIdea, getSimilarI
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────
 const MOCK_IDEAS = [
-  { id: '1', title: 'Idea Alpha', content: 'Content for alpha', tags: 'tech;ai' },
-  { id: '2', title: 'Idea Beta',  content: 'Content for beta',  tags: 'science' },
-  { id: '3', title: 'Idea Gamma', content: 'Content about tech', tags: '' },
+  { id: '1', title: 'Idea Alpha', content: 'Content for alpha', tags: 'tech;ai',      book_id: 1 },
+  { id: '2', title: 'Idea Beta',  content: 'Content for beta',  tags: 'science',      book_id: 1 },
+  { id: '3', title: 'Idea Gamma', content: 'Content about tech', tags: '',            book_id: 1 },
 ];
 
 const MOCK_SIMILAR = [
-  { id: '4', title: 'Similar One', content: 'Similar content', tags: 'ml' },
+  { id: '4', title: 'Similar One', content: 'Similar content', tags: 'ml', book_id: 1 },
 ];
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -360,6 +366,7 @@ describe('Dashboard — similar ideas search', () => {
 describe('Dashboard — create idea modal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSelectedBook = { id: 1, title: 'Test Book' };
     resolvedGetIdeas();
     createIdea.mockResolvedValue({ data: { id: '99' } });
   });
@@ -421,6 +428,7 @@ describe('Dashboard — create idea modal', () => {
 describe('Dashboard — edit idea modal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSelectedBook = { id: 1, title: 'Test Book' };
     resolvedGetIdeas();
     updateIdea.mockResolvedValue({ data: {} });
   });
@@ -552,6 +560,7 @@ describe('Dashboard — delete idea', () => {
 describe('Dashboard — save idea error handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSelectedBook = { id: 1, title: 'Test Book' };
     resolvedGetIdeas();
     vi.spyOn(window, 'alert').mockImplementation(() => {});
   });
@@ -592,6 +601,7 @@ describe('Dashboard — save idea error handling', () => {
 describe('Dashboard — getFilteredIdeas pure logic', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSelectedBook = null;
     resolvedGetIdeas();
   });
 
@@ -635,6 +645,7 @@ describe('Dashboard — radio button filtering', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSelectedBook = null;
     resolvedGetIdeas();
     getUserIdeas.mockResolvedValue({ data: MOCK_USER_IDEAS });
   });

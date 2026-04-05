@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import TableOfContents from './pages/TableOfContents';
 import TagsIdeasPage from './pages/TagsIdeasPage';
 import Navbar from './components/Navbar';
+import { BookProvider } from './contexts/BookContext';
 
 const ProtectedRoute = ({ children }) => {
   // const auth = true; // Simulation for debug
@@ -18,6 +19,7 @@ function App() {
   return (
     <div className="pt-20 p-4"> {/* pt-20 laisse de la place sous la Navbar */}
     <Router>
+    <BookProvider>
       <div className="min-h-screen bg-gray-50">
         <Navbar />
         <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
@@ -58,6 +60,7 @@ function App() {
           </Routes>
         </div>
       </div>
+    </BookProvider>
     </Router>
     </div>
   );

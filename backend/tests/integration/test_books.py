@@ -14,7 +14,6 @@ Contracts asserted:
 
 import sqlite3
 import pytest
-from tests.integration.conftest import auth_headers, create_db_user
 
 
 @pytest.mark.integration
