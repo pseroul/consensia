@@ -31,6 +31,10 @@ from backend.data_handler import (
     remove_book_author,
     get_book_authors,
     get_users,
+    cast_vote,
+    remove_vote,
+    get_idea_votes,
+    get_user_vote,
 )
 
 @pytest.mark.unit
@@ -782,3 +786,159 @@ class TestDataHandler:
         init_database()
         result = get_users()
         assert result == []
+
+
+@pytest.mark.unit
+class TestVoting:
+    """Unit tests for idea_votes CRUD functions."""
+
+    def setup_method(self):
+        import tempfile
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.test_db = self._tmp.name
+        self._tmp.close()
+        os.environ["NAME_DB"] = self.test_db
+        init_database()
+
+        # Seed one user, one book, one idea
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("alice", "alice@example.com", "secret"),
+        )
+        self.alice_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("bob", "bob@example.com", "secret"),
+        )
+        self.bob_id = cursor.lastrowid
+        cursor.execute("INSERT INTO books (title) VALUES (?)", ("Test Book",))
+        book_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+            ("Test Idea", "Some content", self.alice_id, book_id),
+        )
+        self.idea_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+    def teardown_method(self):
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
+
+    def test_init_database_creates_idea_votes_table(self):
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='idea_votes';"
+        )
+        assert cursor.fetchone() is not None
+        conn.close()
+
+    def test_cast_upvote_succeeds(self):
+        result = cast_vote(self.idea_id, "alice@example.com", 1)
+        assert result is True
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT value FROM idea_votes WHERE idea_id = ? AND user_id = ?",
+            (self.idea_id, self.alice_id),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == 1
+
+    def test_cast_downvote_succeeds(self):
+        result = cast_vote(self.idea_id, "alice@example.com", -1)
+        assert result is True
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT value FROM idea_votes WHERE idea_id = ? AND user_id = ?",
+            (self.idea_id, self.alice_id),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        assert row[0] == -1
+
+    def test_cast_vote_invalid_value_returns_false(self):
+        assert cast_vote(self.idea_id, "alice@example.com", 0) is False
+        assert cast_vote(self.idea_id, "alice@example.com", 2) is False
+
+    def test_cast_vote_nonexistent_user_returns_false(self):
+        assert cast_vote(self.idea_id, "nobody@example.com", 1) is False
+
+    def test_cast_vote_updates_existing_vote(self):
+        cast_vote(self.idea_id, "alice@example.com", 1)
+        cast_vote(self.idea_id, "alice@example.com", -1)  # flip
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*), value FROM idea_votes WHERE idea_id = ? AND user_id = ?",
+            (self.idea_id, self.alice_id),
+        )
+        count, value = cursor.fetchone()
+        conn.close()
+        assert count == 1   # still only one row
+        assert value == -1  # updated value
+
+    def test_get_idea_votes_empty(self):
+        result = get_idea_votes(self.idea_id)
+        assert result == {"score": 0, "count": 0}
+
+    def test_get_idea_votes_with_upvotes(self):
+        cast_vote(self.idea_id, "alice@example.com", 1)
+        cast_vote(self.idea_id, "bob@example.com", 1)
+
+        result = get_idea_votes(self.idea_id)
+        assert result["score"] == 2
+        assert result["count"] == 2
+
+    def test_get_idea_votes_mixed(self):
+        cast_vote(self.idea_id, "alice@example.com", 1)
+        cast_vote(self.idea_id, "bob@example.com", -1)
+
+        result = get_idea_votes(self.idea_id)
+        assert result["score"] == 0
+        assert result["count"] == 2
+
+    def test_get_user_vote_returns_none_when_not_voted(self):
+        assert get_user_vote(self.idea_id, "alice@example.com") is None
+
+    def test_get_user_vote_returns_value_after_voting(self):
+        cast_vote(self.idea_id, "alice@example.com", 1)
+        assert get_user_vote(self.idea_id, "alice@example.com") == 1
+
+    def test_get_user_vote_returns_updated_value(self):
+        cast_vote(self.idea_id, "alice@example.com", 1)
+        cast_vote(self.idea_id, "alice@example.com", -1)
+        assert get_user_vote(self.idea_id, "alice@example.com") == -1
+
+    def test_remove_vote_removes_existing_vote(self):
+        cast_vote(self.idea_id, "alice@example.com", 1)
+        result = remove_vote(self.idea_id, "alice@example.com")
+        assert result is True
+        assert get_user_vote(self.idea_id, "alice@example.com") is None
+
+    def test_remove_vote_nonexistent_vote_still_returns_true(self):
+        # No vote exists, but the user does — should succeed (idempotent)
+        result = remove_vote(self.idea_id, "alice@example.com")
+        assert result is True
+
+    def test_remove_vote_nonexistent_user_returns_false(self):
+        result = remove_vote(self.idea_id, "nobody@example.com")
+        assert result is False
+
+    def test_score_updates_after_remove(self):
+        cast_vote(self.idea_id, "alice@example.com", 1)
+        cast_vote(self.idea_id, "bob@example.com", 1)
+        remove_vote(self.idea_id, "alice@example.com")
+
+        result = get_idea_votes(self.idea_id)
+        assert result["score"] == 1
+        assert result["count"] == 1

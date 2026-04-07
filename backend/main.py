@@ -17,7 +17,7 @@ from data_handler import (
     get_content, get_tags, get_tags_from_idea, add_idea, add_tag,
     add_relation, remove_idea, remove_tag, remove_relation, update_idea, get_similar_idea,
     add_book, get_books, remove_book, add_book_author, remove_book_author, get_book_authors,
-    get_users
+    get_users, cast_vote, remove_vote, get_idea_votes, get_user_vote
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -105,6 +105,15 @@ class RelationItem(BaseModel):
     """
     idea_id: int
     tag_name: str
+
+
+class VoteItem(BaseModel):
+    """Data model for casting a vote on an idea.
+
+    Attributes:
+        value (int): 1 for upvote, -1 for downvote.
+    """
+    value: int
 
 
 class LoginRequest(BaseModel):
@@ -632,6 +641,86 @@ async def get_all_users(current_user: dict = Depends(get_current_user)) -> List[
         return get_users()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving users: {str(e)}") from e
+
+
+# Vote endpoints
+@app.get("/ideas/{idea_id}/votes", response_model=dict)
+async def get_votes_for_idea(idea_id: int, current_user: dict = Depends(get_current_user)) -> dict:
+    """Get aggregated vote data for an idea plus the current user's vote.
+
+    Args:
+        idea_id (int): ID of the idea.
+        current_user (dict): Current authenticated user from JWT token.
+
+    Returns:
+        dict: {'score': int, 'count': int, 'user_vote': int | None}
+    """
+    try:
+        user_email = current_user.get("email")
+        votes = get_idea_votes(idea_id)
+        votes["user_vote"] = get_user_vote(idea_id, user_email)
+        return votes
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving votes: {str(e)}") from e
+
+
+@app.post("/ideas/{idea_id}/vote", response_model=dict)
+async def vote_for_idea(idea_id: int, vote: VoteItem, current_user: dict = Depends(get_current_user)) -> dict:
+    """Cast or update a vote on an idea.
+
+    Args:
+        idea_id (int): ID of the idea to vote on.
+        vote (VoteItem): Vote data containing value (1 or -1).
+        current_user (dict): Current authenticated user from JWT token.
+
+    Returns:
+        dict: Updated vote summary.
+
+    Raises:
+        HTTPException: 400 if value is not 1 or -1, 404 if user not found.
+    """
+    if vote.value not in (1, -1):
+        raise HTTPException(status_code=400, detail="Vote value must be 1 or -1")
+    user_email = current_user.get("email")
+    try:
+        success = cast_vote(idea_id, user_email, vote.value)
+        if not success:
+            raise HTTPException(status_code=404, detail="User or idea not found")
+        votes = get_idea_votes(idea_id)
+        votes["user_vote"] = vote.value
+        return votes
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error casting vote: {str(e)}") from e
+
+
+@app.delete("/ideas/{idea_id}/vote", response_model=dict)
+async def delete_vote_for_idea(idea_id: int, current_user: dict = Depends(get_current_user)) -> dict:
+    """Remove the current user's vote from an idea.
+
+    Args:
+        idea_id (int): ID of the idea.
+        current_user (dict): Current authenticated user from JWT token.
+
+    Returns:
+        dict: Updated vote summary.
+
+    Raises:
+        HTTPException: 404 if user not found.
+    """
+    user_email = current_user.get("email")
+    try:
+        success = remove_vote(idea_id, user_email)
+        if not success:
+            raise HTTPException(status_code=404, detail="User not found")
+        votes = get_idea_votes(idea_id)
+        votes["user_vote"] = None
+        return votes
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error removing vote: {str(e)}") from e
 
 
 # Health check endpoint

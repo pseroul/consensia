@@ -27,3 +27,4 @@ ignore = [
 [tool.vulture]
 min_confidence = 80
 paths = ["."]
+exclude = ["venv/"]

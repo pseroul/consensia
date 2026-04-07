@@ -80,6 +80,19 @@ def init_database() -> None:
     );
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS idea_votes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        idea_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        value INTEGER NOT NULL CHECK (value IN (-1, 1)),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (idea_id, user_id),
+        FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    """)
+
     conn.commit()
     conn.close()
 
@@ -695,6 +708,136 @@ def get_users() -> list[dict[Any, Any]]:
     df = pd.read_sql_query("SELECT id, username, email FROM users", conn)
     conn.close()
     return df.to_dict("records")
+
+
+# VOTE FUNCTIONS
+
+def cast_vote(idea_id: int, user_email: str, value: int) -> bool:
+    """
+    Cast or update a vote on an idea.
+
+    Uses INSERT OR REPLACE so a second call simply flips the value.
+
+    Args:
+        idea_id (int): ID of the idea to vote on
+        user_email (str): Email of the voting user
+        value (int): Vote value — must be 1 (upvote) or -1 (downvote)
+
+    Returns:
+        bool: True on success, False if user or idea not found / value invalid
+    """
+    if value not in (1, -1):
+        return False
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM users WHERE email = ?", (user_email,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        user_id = row[0]
+        cursor.execute(
+            """
+            INSERT INTO idea_votes (idea_id, user_id, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(idea_id, user_id) DO UPDATE SET value = excluded.value,
+                                                        created_at = datetime('now')
+            """,
+            (idea_id, user_id, value),
+        )
+        conn.commit()
+        logger.info(f"Vote ({value}) cast by user '{user_email}' on idea '{idea_id}'.")
+        return True
+    except sqlite3.Error as e:
+        logger.info(f"Error casting vote: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def remove_vote(idea_id: int, user_email: str) -> bool:
+    """
+    Remove a user's vote from an idea.
+
+    Args:
+        idea_id (int): ID of the idea
+        user_email (str): Email of the voting user
+
+    Returns:
+        bool: True on success, False if user not found
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM users WHERE email = ?", (user_email,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        user_id = row[0]
+        cursor.execute(
+            "DELETE FROM idea_votes WHERE idea_id = ? AND user_id = ?",
+            (idea_id, user_id),
+        )
+        conn.commit()
+        logger.info(f"Vote removed by user '{user_email}' on idea '{idea_id}'.")
+        return True
+    except sqlite3.Error as e:
+        logger.info(f"Error removing vote: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_idea_votes(idea_id: int) -> dict[str, int]:
+    """
+    Get aggregated vote data for an idea.
+
+    Args:
+        idea_id (int): ID of the idea
+
+    Returns:
+        dict: {'score': int, 'count': int}
+              score = SUM of all values (+1/-1), count = total number of votes
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT COALESCE(SUM(value), 0), COUNT(*) FROM idea_votes WHERE idea_id = ?",
+            (idea_id,),
+        )
+        row = cursor.fetchone()
+        return {"score": row[0], "count": row[1]}
+    finally:
+        conn.close()
+
+
+def get_user_vote(idea_id: int, user_email: str) -> int | None:
+    """
+    Get the current user's vote on a specific idea.
+
+    Args:
+        idea_id (int): ID of the idea
+        user_email (str): Email of the user
+
+    Returns:
+        int | None: 1, -1, or None if the user has not voted
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT v.value FROM idea_votes v
+            JOIN users u ON v.user_id = u.id
+            WHERE v.idea_id = ? AND u.email = ?
+            """,
+            (idea_id, user_email),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
