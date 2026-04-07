@@ -219,21 +219,24 @@ async def get_all_user_ideas(current_user: dict = Depends(get_current_user)) -> 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving data: {str(e)}") from e
 @app.get("/ideas/tags/{tags}", response_model=List[IdeaItem])
-async def get_ideas_by_tags(tags: str, current_user: dict = Depends(get_current_user)) -> List[dict[Hashable, str]]:
+async def get_ideas_by_tags(
+    tags: str, book_id: Optional[int] = None, current_user: dict = Depends(get_current_user)
+) -> List[dict[Hashable, str]]:
     """Get ideas by tags (semicolon separated).
-    
+
     Args:
         tags (str): Tags to filter ideas, separated by semicolons.
+        book_id (Optional[int]): Optional book ID to restrict ideas to a specific book.
         current_user (dict): Current authenticated user from JWT token
-    
+
     Returns:
         List[dict[Hashable, str]]: List of ideas matching the specified tags.
-    
+
     Raises:
         HTTPException: If there's an error retrieving data from the database.
     """
     try:
-        ideas = get_idea_from_tags(tags)
+        ideas = get_idea_from_tags(tags, book_id)
         return ideas
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving data by tags: {str(e)}") from e
@@ -276,20 +279,23 @@ async def get_idea_content(idea_id: int, current_user: dict = Depends(get_curren
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving content: {str(e)}") from e
 @app.get("/tags", response_model=List[TagItem])
-async def get_all_tags(current_user: dict = Depends(get_current_user)) -> List[dict[Hashable, Any]]:
-    """Get all tags.
-    
+async def get_all_tags(
+    book_id: Optional[int] = None, current_user: dict = Depends(get_current_user)
+) -> List[dict[Hashable, Any]]:
+    """Get all tags, optionally filtered to those used in a specific book.
+
     Args:
+        book_id (Optional[int]): Optional book ID to restrict tags to that book.
         current_user (dict): Current authenticated user from JWT token
-    
+
     Returns:
-        List[dict[Hashable, Any]]: List of all tags in the system.
-    
+        List[dict[Hashable, Any]]: List of tags.
+
     Raises:
         HTTPException: If there's an error retrieving tags from the database.
     """
     try:
-        tags = get_tags()
+        tags = get_tags(book_id)
         return tags
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving tags: {str(e)}") from e

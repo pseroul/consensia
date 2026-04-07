@@ -281,22 +281,20 @@ const TagsIdeasPage = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const tagsResponse = await getTags();
+      const tagsResponse = await getTags(selectedBook?.id ?? null);
       const tagsData = tagsResponse.data;
 
       const tagsWithIdeas = await Promise.all(
         tagsData.map(async (tag) => {
-          const ideasResponse = await getIdeasFromTags(tag.name);
+          const ideasResponse = await getIdeasFromTags(tag.name, selectedBook?.id ?? null);
           const ideasData = ideasResponse.data;
           return {
             name: tag.name,
-            ideas: ideasData
-              .filter((idea) => !selectedBook || idea.book_id === selectedBook.id)
-              .map(idea => ({
-                id: idea.id,
-                name: idea.title || 'Untitled Idea',
-                description: idea.content || '',
-              })),
+            ideas: ideasData.map(idea => ({
+              id: idea.id,
+              name: idea.title || 'Untitled Idea',
+              description: idea.content || '',
+            })),
           };
         })
       );

@@ -109,6 +109,21 @@ class TestMainAPI:
         data = response.json()
         assert len(data) == 1
         assert data[0]["title"] == "Test Idea 1"
+        mock_get_ideas_by_tags.assert_called_with("tag1;tag2", None)
+
+    @patch('backend.main.get_idea_from_tags')
+    def test_get_ideas_by_tags_with_book_id(self, mock_get_ideas_by_tags):
+        """Test getting ideas by tags filtered by book_id"""
+        mock_get_ideas_by_tags.return_value = [
+            {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1", "book_id": 2}
+        ]
+        headers = self._get_auth_headers()
+
+        response = client.get("/ideas/tags/tag1?book_id=2", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        mock_get_ideas_by_tags.assert_called_with("tag1", 2)
 
     @patch('backend.main.get_similar_idea')
     def test_search_ideas(self, mock_get_similar_idea):
@@ -157,6 +172,20 @@ class TestMainAPI:
         data = response.json()
         assert len(data) == 2
         assert data[0]["name"] == "tag1"
+        mock_get_tags.assert_called_with(None)
+
+    @patch('backend.main.get_tags')
+    def test_get_tags_with_book_id(self, mock_get_tags):
+        """Test getting tags filtered by book_id"""
+        headers = self._get_auth_headers()
+        mock_get_tags.return_value = [{"name": "book-tag"}]
+
+        response = client.get("/tags?book_id=3", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["name"] == "book-tag"
+        mock_get_tags.assert_called_with(3)
 
     @patch('backend.main.get_tags_from_idea')
     def test_get_tags_for_idea(self, mock_get_tags_from_idea):

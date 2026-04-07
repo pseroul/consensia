@@ -616,6 +616,81 @@ class TestDataHandler:
         result = get_idea_from_tags("nonexistent-tag")
         assert len(result) == 0
 
+    def test_get_idea_from_tags_with_book_id(self) -> None:
+        """Test get_idea_from_tags filters by book_id when provided"""
+        init_database()
+        book_id_1 = self._create_book()
+        book_id_2 = self._create_book()
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+                      ("testuser", "test@example.com", "hashed_password"))
+        user_id = cursor.lastrowid
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Idea Book1", "Content 1", user_id, book_id_1))
+        idea_id_1 = cursor.lastrowid
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Idea Book2", "Content 2", user_id, book_id_2))
+        idea_id_2 = cursor.lastrowid
+
+        cursor.execute("INSERT INTO tags (name) VALUES (?)", ("shared-tag",))
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", (idea_id_1, "shared-tag"))
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", (idea_id_2, "shared-tag"))
+        conn.commit()
+        conn.close()
+
+        result = get_idea_from_tags("shared-tag", book_id=book_id_1)
+        assert len(result) == 1
+        assert result[0]['title'] == "Idea Book1"
+
+        result = get_idea_from_tags("shared-tag", book_id=book_id_2)
+        assert len(result) == 1
+        assert result[0]['title'] == "Idea Book2"
+
+        result = get_idea_from_tags("shared-tag")
+        assert len(result) == 2
+
+    def test_get_tags_with_book_id(self) -> None:
+        """Test get_tags filters by book_id when provided"""
+        init_database()
+        book_id_1 = self._create_book()
+        book_id_2 = self._create_book()
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+                      ("testuser", "test@example.com", "hashed_password"))
+        user_id = cursor.lastrowid
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Idea Book1", "Content 1", user_id, book_id_1))
+        idea_id_1 = cursor.lastrowid
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Idea Book2", "Content 2", user_id, book_id_2))
+        idea_id_2 = cursor.lastrowid
+
+        cursor.execute("INSERT INTO tags (name) VALUES (?)", ("tag-book1",))
+        cursor.execute("INSERT INTO tags (name) VALUES (?)", ("tag-book2",))
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", (idea_id_1, "tag-book1"))
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", (idea_id_2, "tag-book2"))
+        conn.commit()
+        conn.close()
+
+        result = get_tags(book_id=book_id_1)
+        assert len(result) == 1
+        assert result[0]['name'] == "tag-book1"
+
+        result = get_tags(book_id=book_id_2)
+        assert len(result) == 1
+        assert result[0]['name'] == "tag-book2"
+
+        result = get_tags()
+        assert len(result) == 2
+
     # ----- Book CRUD tests -----
 
     def test_add_book(self) -> None:

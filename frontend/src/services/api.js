@@ -40,11 +40,13 @@ api.interceptors.response.use(
 
 export const getIdeas = () => api.get('/ideas');
 export const getUserIdeas = () => api.get('/user/ideas');
-export const getIdeasFromTags = (tags) => api.get(`/ideas/tags/${tags}`);
+export const getIdeasFromTags = (tags, bookId = null) =>
+  api.get(`/ideas/tags/${tags}`, bookId != null ? { params: { book_id: bookId } } : {});
 export const getTocStructure = () => api.get('/toc/structure');
 export const updateTocStructure = () => api.post('/toc/update');
 
-export const getTags = () => api.get('/tags');
+export const getTags = (bookId = null) =>
+  api.get('/tags', bookId != null ? { params: { book_id: bookId } } : {});
 export const getSimilarIdeas = (idea) => api.get(`/ideas/similar/${idea}`);
 
 export const createIdea = (idea) => api.post('/ideas', idea);

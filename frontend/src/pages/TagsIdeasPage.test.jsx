@@ -144,8 +144,9 @@ describe('TagsIdeasPage — initial render', () => {
     render(<TagsIdeasPage />);
     await waitFor(() => screen.getByText('frontend'));
     expect(getTags).toHaveBeenCalledTimes(1);
-    expect(getIdeasFromTags).toHaveBeenCalledWith('frontend');
-    expect(getIdeasFromTags).toHaveBeenCalledWith('backend');
+    expect(getTags).toHaveBeenCalledWith(null);
+    expect(getIdeasFromTags).toHaveBeenCalledWith('frontend', null);
+    expect(getIdeasFromTags).toHaveBeenCalledWith('backend', null);
     expect(getIdeas).toHaveBeenCalledTimes(1);
   });
 });
