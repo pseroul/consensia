@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Trash2, Edit3, Loader2, Lightbulb } from 'lucide-react';
 import { getIdeas, getUserIdeas, createIdea, deleteIdea, updateIdea, getSimilarIdeas } from '../services/api';
 import IdeaModal from '../components/IdeaModal';
+import VoteButtons from '../components/VoteButtons';
 import { useBook } from '../contexts/BookContext';
 
 /**
@@ -291,8 +292,8 @@ const Dashboard = () => {
                   {idea.tags.split(';').map((tag, index) => {
                     const trimmedTag = tag.trim();
                     return trimmedTag ? (
-                      <span 
-                        key={index} 
+                      <span
+                        key={index}
                         className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
                       >
                         {trimmedTag}
@@ -301,6 +302,9 @@ const Dashboard = () => {
                   })}
                 </div>
               )}
+
+              {/* Vote Buttons */}
+              <VoteButtons ideaId={idea.id} />
             </div>
           ))}
         </div>

@@ -52,6 +52,11 @@ vi.mock('../services/api', () => ({
   getSimilarIdeas: vi.fn(),
 }));
 
+// ─── Mock VoteButtons to isolate Dashboard logic ──────────────────────────────
+vi.mock('../components/VoteButtons', () => ({
+  default: ({ ideaId }) => <div data-testid={`vote-buttons-${ideaId}`} />,
+}));
+
 // ─── Mock IdeaModal to isolate Dashboard logic ────────────────────────────────
 vi.mock('../components/IdeaModal', () => ({
   default: ({ isOpen, onClose, onSave, initialData }) => {

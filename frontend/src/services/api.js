@@ -61,3 +61,7 @@ export const getBookAuthors = (bookId) => api.get(`/books/${bookId}/authors`);
 export const addBookAuthor = (bookId, userId) => api.post('/book-authors', { book_id: bookId, user_id: userId });
 export const removeBookAuthor = (bookId, userId) => api.delete('/book-authors', { data: { book_id: bookId, user_id: userId } });
 export const getUsers = () => api.get('/users');
+
+export const getIdeaVotes = (id) => api.get(`/ideas/${id}/votes`);
+export const castVote = (id, value) => api.post(`/ideas/${id}/vote`, { value });
+export const removeVote = (id) => api.delete(`/ideas/${id}/vote`);
