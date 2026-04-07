@@ -28,12 +28,14 @@ vi.mock('autoprefixer', () => ({}));
 // Mock global React Router
 vi.mock('react-router-dom', () => ({
   BrowserRouter: ({ children }) => children,
+  MemoryRouter: ({ children }) => children,
   Routes: ({ children }) => children,
   Route: ({ children }) => children,
+  Navigate: () => null,
   Link: ({ to, children }) => React.createElement('a', { href: to }, children),
   useNavigate: () => vi.fn(),
   useParams: () => ({}),
-  useLocation: () => ({}),
+  useLocation: () => ({ pathname: '/' }),
 }));
 
 // Mock global Axios

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, LogOut, Lightbulb, Home, User, Tag, BookOpen } from 'lucide-react';
 import BookSelector from './BookSelector';
 
 const Navbar = ({ isOpen: controlledIsOpen = false }) => {
   const [isOpen, setIsOpen] = useState(controlledIsOpen);
+  useLocation(); // re-render on route change to re-read localStorage
   const isAuthenticated = !!localStorage.getItem('access_token');
 
   if (!isAuthenticated) return null;
