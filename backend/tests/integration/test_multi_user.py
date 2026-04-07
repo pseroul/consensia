@@ -18,15 +18,15 @@ from tests.integration.conftest import make_token
 
 @pytest.mark.integration
 class TestUserIdeaIsolation:
-    def test_user_ideas_only_returns_own_ideas(self, client, alice, bob):
+    def test_user_ideas_only_returns_own_ideas(self, client, alice, bob, book):
         client.post(
             "/ideas",
-            json={"title": "Alice's Private Idea", "content": "For Alice only"},
+            json={"title": "Alice's Private Idea", "content": "For Alice only", "book_id": book},
             headers=alice["headers"],
         )
         client.post(
             "/ideas",
-            json={"title": "Bob's Private Idea", "content": "For Bob only"},
+            json={"title": "Bob's Private Idea", "content": "For Bob only", "book_id": book},
             headers=bob["headers"],
         )
 
@@ -36,15 +36,15 @@ class TestUserIdeaIsolation:
         assert "Alice's Private Idea" in alice_titles
         assert "Bob's Private Idea" not in alice_titles
 
-    def test_other_user_ideas_excluded_for_bob(self, client, alice, bob):
+    def test_other_user_ideas_excluded_for_bob(self, client, alice, bob, book):
         client.post(
             "/ideas",
-            json={"title": "Alice's Idea", "content": "Alice"},
+            json={"title": "Alice's Idea", "content": "Alice", "book_id": book},
             headers=alice["headers"],
         )
         client.post(
             "/ideas",
-            json={"title": "Bob's Idea", "content": "Bob"},
+            json={"title": "Bob's Idea", "content": "Bob", "book_id": book},
             headers=bob["headers"],
         )
 
@@ -54,15 +54,15 @@ class TestUserIdeaIsolation:
         assert "Bob's Idea" in bob_titles
         assert "Alice's Idea" not in bob_titles
 
-    def test_all_ideas_shows_both_users(self, client, alice, bob):
+    def test_all_ideas_shows_both_users(self, client, alice, bob, book):
         client.post(
             "/ideas",
-            json={"title": "From Alice", "content": "A"},
+            json={"title": "From Alice", "content": "A", "book_id": book},
             headers=alice["headers"],
         )
         client.post(
             "/ideas",
-            json={"title": "From Bob", "content": "B"},
+            json={"title": "From Bob", "content": "B", "book_id": book},
             headers=bob["headers"],
         )
 
@@ -72,14 +72,14 @@ class TestUserIdeaIsolation:
         assert "From Alice" in titles
         assert "From Bob" in titles
 
-    def test_idea_ownership_is_determined_by_token_email(self, client, alice, bob):
+    def test_idea_ownership_is_determined_by_token_email(self, client, alice, bob, book):
         """
         Alice creates an idea; it must appear under Alice's /user/ideas
         but not Bob's, proving ownership is stored and queried by email.
         """
         client.post(
             "/ideas",
-            json={"title": "Ownership Test", "content": "Owned by Alice"},
+            json={"title": "Ownership Test", "content": "Owned by Alice", "book_id": book},
             headers=alice["headers"],
         )
 
@@ -95,17 +95,17 @@ class TestUserIdeaIsolation:
         assert alice_owns is True
         assert bob_sees is False
 
-    def test_two_users_can_have_independent_idea_sets(self, client, alice, bob):
+    def test_two_users_can_have_independent_idea_sets(self, client, alice, bob, book):
         for i in range(3):
             client.post(
                 "/ideas",
-                json={"title": f"Alice Idea {i}", "content": "A"},
+                json={"title": f"Alice Idea {i}", "content": "A", "book_id": book},
                 headers=alice["headers"],
             )
         for i in range(2):
             client.post(
                 "/ideas",
-                json={"title": f"Bob Idea {i}", "content": "B"},
+                json={"title": f"Bob Idea {i}", "content": "B", "book_id": book},
                 headers=bob["headers"],
             )
 
@@ -119,17 +119,21 @@ class TestUserIdeaIsolation:
 @pytest.mark.integration
 class TestGhostUserToken:
     def test_create_idea_for_nonexistent_user_returns_200_but_id_is_negative(
-        self, client, db_path
+        self, client, db_path, alice
     ):
         """
         add_idea returns -1 when the owner email is not in the users table.
         The API wraps this in a 200 response with {"id": -1}.
         This is a documented (if quirky) contract worth pinning before refactor.
         """
+        # Create a book first (alice is used to authenticate the book creation)
+        book_resp = client.post("/books", json={"title": "Ghost Book"}, headers=alice["headers"])
+        book_id = book_resp.json()["id"]
+
         ghost_headers = {"Authorization": f"Bearer {make_token('ghost@nowhere.com')}"}
         response = client.post(
             "/ideas",
-            json={"title": "Ghost Idea", "content": "Nobody owns this"},
+            json={"title": "Ghost Idea", "content": "Nobody owns this", "book_id": book_id},
             headers=ghost_headers,
         )
         assert response.status_code == 200

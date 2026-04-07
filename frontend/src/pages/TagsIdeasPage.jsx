@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, BookOpen, ChevronRight, Loader2, X, RotateCcw, Trash2 } from 'lucide-react';
 import { getTags, getIdeasFromTags, getIdeas, deleteTag } from '../services/api';
+import { useBook } from '../contexts/BookContext';
 
 /**
  * Modal component for displaying full content of tags and ideas
@@ -257,6 +258,8 @@ const TagItem = ({ item, level = 1, onShowFullContent, allCollapsed, onDeleteTag
  * - Content refresh capability
  */
 const TagsIdeasPage = () => {
+  const { selectedBook } = useBook() ?? {};
+
   // State management for component data
   const [tags, setTags] = useState([]);
   const [untaggedIdeas, setUntaggedIdeas] = useState([]);
@@ -285,14 +288,15 @@ const TagsIdeasPage = () => {
         tagsData.map(async (tag) => {
           const ideasResponse = await getIdeasFromTags(tag.name);
           const ideasData = ideasResponse.data;
-          console.log('Tag:', tag.name, 'Ideas:', ideasData);
           return {
             name: tag.name,
-            ideas: ideasData.map(idea => ({
-              id: idea.id,
-              name: idea.title || 'Untitled Idea',
-              description: idea.content || '',
-            })),
+            ideas: ideasData
+              .filter((idea) => !selectedBook || idea.book_id === selectedBook.id)
+              .map(idea => ({
+                id: idea.id,
+                name: idea.title || 'Untitled Idea',
+                description: idea.content || '',
+              })),
           };
         })
       );
@@ -311,12 +315,15 @@ const TagsIdeasPage = () => {
         });
       });
       
-      const untagged = allIdeasData.filter(idea => !taggedIdeaIds.has(idea.id)).map(idea => ({
+      const untagged = allIdeasData
+        .filter(idea => !taggedIdeaIds.has(idea.id))
+        .filter(idea => !selectedBook || idea.book_id === selectedBook.id)
+        .map(idea => ({
         id: idea.id,
         name: idea.title || 'Untitled Idea',
         description: idea.content || '',
       }));
-      
+
       setUntaggedIdeas(untagged);
     } catch (err) {
       console.error('Error fetching tags and ideas:', err);
@@ -364,10 +371,11 @@ const TagsIdeasPage = () => {
     }
   };
 
-  // Load tags and ideas when component mounts
+  // Load tags and ideas when component mounts or selected book changes
   useEffect(() => {
     fetchTagsAndIdeas();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBook]);
 
   /**
    * Collapse all sections

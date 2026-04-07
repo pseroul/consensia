@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Tag, Loader2 } from 'lucide-react'; // Vérifie bien que 'Tag' est ici
 
-const IdeaModal = ({ isOpen, onClose, onSave, initialData }) => {
+const IdeaModal = ({ isOpen, onClose, onSave, initialData, bookId }) => {
   const [formData, setFormData] = useState({ title: '', content: '' });
   const [currentTag, setCurrentTag] = useState('');
   const [tags, setTags] = useState([]);
@@ -46,7 +46,8 @@ const IdeaModal = ({ isOpen, onClose, onSave, initialData }) => {
     const dataToSave = {
       title: formData.title,
       content: formData.content,
-      tags: tags.length > 0 ? tags.join(';') : "" // Send as semicolon-separated string
+      tags: tags.length > 0 ? tags.join(';') : "", // Send as semicolon-separated string
+      ...(bookId != null && { book_id: bookId }),
     };
 
     const savePromise = onSave(dataToSave);

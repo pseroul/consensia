@@ -17,6 +17,9 @@ exports[`Navbar Component > matches snapshot 1`] = `
           Consensia
         </span>
       </div>
+      <div
+        data-testid="book-selector-stub"
+      />
       <button
         class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
       />

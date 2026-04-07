@@ -179,6 +179,14 @@ def auth_headers(email: str, expires: timedelta = timedelta(minutes=30)) -> dict
 
 
 @pytest.fixture()
+def book(client: TestClient, alice: dict) -> int:
+    """Create a book and return its id. Requires alice to be authenticated."""
+    response = client.post("/books", json={"title": "Test Book"}, headers=alice["headers"])
+    assert response.status_code == 200
+    return response.json()["id"]
+
+
+@pytest.fixture()
 def alice(db_path: str) -> dict:
     """
     User 'alice' with a real TOTP secret and pre-built auth headers.

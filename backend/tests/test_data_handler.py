@@ -23,7 +23,14 @@ from backend.data_handler import (
     remove_tag,
     remove_relation,
     update_idea,
-    embed_all_ideas
+    embed_all_ideas,
+    add_book,
+    get_books,
+    remove_book,
+    add_book_author,
+    remove_book_author,
+    get_book_authors,
+    get_users,
 )
 
 @pytest.mark.unit
@@ -43,33 +50,33 @@ class TestDataHandler:
         if os.path.exists(self.test_db):
             os.remove(self.test_db)
     
+    def _create_book(self, title: str = "Test Book") -> int:
+        """Helper: insert a book and return its id."""
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO books (title) VALUES (?)", (title,))
+        book_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return book_id
+
     def test_init_database(self):
         """Test database initialization"""
         init_database()
-        
+
         # Check that the database file was created
         assert os.path.exists(self.test_db)
-        
+
         # Connect to the database and verify tables exist
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        
-        # Check for users table
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users';")
-        assert cursor.fetchone() is not None
-        
-        # Check for tags table
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tags';")
-        assert cursor.fetchone() is not None
-        
-        # Check for ideas table
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ideas';")
-        assert cursor.fetchone() is not None
-        
-        # Check for relations table
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='relations';")
-        assert cursor.fetchone() is not None
-        
+
+        for table in ('users', 'tags', 'books', 'ideas', 'relations', 'book_authors'):
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table,)
+            )
+            assert cursor.fetchone() is not None, f"Table '{table}' not found"
+
         conn.close()
     
     def test_get_ideas_empty(self) -> None:
@@ -82,47 +89,50 @@ class TestDataHandler:
     def test_get_ideas_with_data(self) -> None:
         """Test get_ideas with sample data"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         idea_id = cursor.lastrowid
-        
+
         cursor.execute("INSERT INTO tags (name) VALUES (?)", ("test-tag",))
-        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", 
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)",
                       (idea_id, "test-tag"))
         conn.commit()
         conn.close()
-        
+
         result = get_ideas()
         assert len(result) == 1
         assert result[0]['title'] == "Test Idea"
         assert result[0]['content'] == "Test Content"
+        assert result[0]['book_id'] == book_id
         assert 'test-tag' in result[0]['tags']
     
     def test_get_content(self) -> None:
         """Test get_content function"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         idea_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        
+
         result = get_content(idea_id)
         assert result == "Test Content"
     
@@ -144,24 +154,25 @@ class TestDataHandler:
     def test_get_tags_from_idea(self) -> None:
         """Test get_tags_from_idea function"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         idea_id = cursor.lastrowid
-        
+
         cursor.execute("INSERT INTO tags (name) VALUES (?)", ("test-tag",))
-        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", 
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)",
                       (idea_id, "test-tag"))
         conn.commit()
         conn.close()
-        
+
         result = get_tags_from_idea(idea_id)
         assert len(result) == 1
         assert result[0] == "test-tag"
@@ -170,24 +181,25 @@ class TestDataHandler:
     def test_get_similar_idea(self, mock_chroma_client) -> None:
         """Test get_similar_idea function"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Mock the ChromaClient to return test data
         mock_instance = Mock()
         mock_chroma_client.return_value = mock_instance
         mock_instance.get_similar_idea.return_value = ["Test Idea"]
-        
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         conn.commit()
         conn.close()
-        
+
         result = get_similar_idea("Test Idea")
         assert len(result) == 1
         assert result[0]['title'] == "Test Idea"
@@ -196,53 +208,55 @@ class TestDataHandler:
     def test_add_idea_success(self, mock_chroma_client) -> None:
         """Test add_idea function success case"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Mock the ChromaClient to avoid actual embedding operations
         mock_instance = Mock()
         mock_chroma_client.return_value = mock_instance
-        
+
         # Insert user first
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         conn.commit()
         conn.close()
-        
-        result = add_idea("New Idea", "New Content", "test@example.com")
+
+        result = add_idea("New Idea", "New Content", "test@example.com", book_id)
         assert result > 0
-        
-        # Verify the idea was inserted
+
+        # Verify the idea was inserted with the correct book
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM ideas WHERE title = ?", ("New Idea",))
         count = cursor.fetchone()[0]
         conn.close()
         assert count == 1
-        
-        # Verify the idea has the correct owner
+
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("SELECT owner_id FROM ideas WHERE title = ?", ("New Idea",))
-        owner_id = cursor.fetchone()[0]
+        cursor.execute("SELECT owner_id, book_id FROM ideas WHERE title = ?", ("New Idea",))
+        row = cursor.fetchone()
         cursor.execute("SELECT id FROM users WHERE email = ?", ("test@example.com",))
         user_id = cursor.fetchone()[0]
-        assert owner_id == user_id
         conn.close()
+        assert row[0] == user_id
+        assert row[1] == book_id
     
     @patch('backend.data_handler.ChromaClient')
     def test_add_idea_nonexistent_user(self, mock_chroma_client) -> None:
         """Test add_idea function with non-existent user email"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Mock the ChromaClient to avoid actual embedding operations
         mock_instance = Mock()
         mock_chroma_client.return_value = mock_instance
-        
+
         # Try to add an idea with a non-existent user email
-        result = add_idea("New Idea", "New Content", "nonexistent@example.com")
+        result = add_idea("New Idea", "New Content", "nonexistent@example.com", book_id)
         assert result == -1
-        
+
         # Verify no idea was inserted
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
@@ -268,22 +282,23 @@ class TestDataHandler:
     def test_add_relation(self) -> None:
         """Test add_relation function"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         idea_id = cursor.lastrowid
-        
+
         cursor.execute("INSERT INTO tags (name) VALUES (?)", ("test-tag",))
         conn.commit()
         conn.close()
-        
+
         add_relation(idea_id, "test-tag")
         
         # Verify the relation was inserted
@@ -299,20 +314,21 @@ class TestDataHandler:
     def test_remove_idea(self, mock_chroma_client) -> None:
         """Test remove_idea function"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Mock the ChromaClient to avoid actual embedding operations
         mock_instance = Mock()
         mock_chroma_client.return_value = mock_instance
-        
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         idea_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -351,20 +367,21 @@ class TestDataHandler:
     def test_remove_relation(self) -> None:
         """Test remove_relation function"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         idea_id = cursor.lastrowid
-        
+
         cursor.execute("INSERT INTO tags (name) VALUES (?)", ("test-tag",))
-        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", 
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)",
                       (idea_id, "test-tag"))
         conn.commit()
         conn.close()
@@ -384,20 +401,21 @@ class TestDataHandler:
     def test_update_idea(self, mock_chroma_client) -> None:
         """Test update_idea function"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Mock the ChromaClient to avoid actual embedding operations
         mock_instance = Mock()
         mock_chroma_client.return_value = mock_instance
-        
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         idea_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -417,20 +435,21 @@ class TestDataHandler:
     def test_embed_all_ideas(self, mock_chroma_client) -> None:
         """Test embed_all_ideas function"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Mock the ChromaClient to avoid actual embedding operations
         mock_instance = Mock()
         mock_chroma_client.return_value = mock_instance
-        
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         conn.commit()
         conn.close()
         
@@ -459,42 +478,43 @@ class TestDataHandler:
     def test_get_user_ideas_with_data(self) -> None:
         """Test get_user_ideas with sample data"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        
+
         # Insert two users
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("user1", "user1@example.com", "hashed_password"))
         user1_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", 
+
+        cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("user2", "user2@example.com", "hashed_password"))
         user2_id = cursor.lastrowid
-        
+
         # Insert ideas for user1
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("User1 Idea", "User1 Content", user1_id))
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("User1 Idea", "User1 Content", user1_id, book_id))
         idea1_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("User1 Idea 2", "User1 Content 2", user1_id))
-        
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("User1 Idea 2", "User1 Content 2", user1_id, book_id))
+
         # Insert idea for user2
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)", 
-                      ("User2 Idea", "User2 Content", user2_id))
-        
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("User2 Idea", "User2 Content", user2_id, book_id))
+
         # Add tags
         cursor.execute("INSERT INTO tags (name) VALUES (?)", ("tag1",))
         cursor.execute("INSERT INTO tags (name) VALUES (?)", ("tag2",))
-        
+
         # Add relations
-        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", 
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)",
                       (idea1_id, "tag1"))
-        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)", 
+        cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)",
                       (idea1_id, "tag2"))
-        
+
         conn.commit()
         conn.close()
         
@@ -532,17 +552,18 @@ class TestDataHandler:
     def test_get_user_ideas_without_tags(self) -> None:
         """Test get_user_ideas when ideas have no tags"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
-        
+
         cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)",
-                      ("Idea without tags", "Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Idea without tags", "Content", user_id, book_id))
         conn.commit()
         conn.close()
         
@@ -555,18 +576,19 @@ class TestDataHandler:
     def test_get_idea_from_tags(self) -> None:
         """Test get_idea_from_tags function"""
         init_database()
-        
+        book_id = self._create_book()
+
         # Insert test data
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
         cursor.execute("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
                       ("testuser", "test@example.com", "hashed_password"))
         user_id = cursor.lastrowid
-        
-        cursor.execute("INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)",
-                      ("Test Idea", "Test Content", user_id))
+
+        cursor.execute("INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+                      ("Test Idea", "Test Content", user_id, book_id))
         idea_id = cursor.lastrowid
-        
+
         cursor.execute("INSERT INTO tags (name) VALUES (?)", ("test-tag",))
         cursor.execute("INSERT INTO relations (idea_id, tag_name) VALUES (?, ?)",
                       (idea_id, "test-tag"))
@@ -589,7 +611,174 @@ class TestDataHandler:
     def test_get_idea_from_tags_nonexistent_tag(self) -> None:
         """Test get_idea_from_tags with non-existent tag"""
         init_database()
-        
+
         # Test with non-existent tag (should return empty list)
         result = get_idea_from_tags("nonexistent-tag")
         assert len(result) == 0
+
+    # ----- Book CRUD tests -----
+
+    def test_add_book(self) -> None:
+        """Test add_book function"""
+        init_database()
+        book_id = add_book("My Book")
+        assert book_id > 0
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute("SELECT title FROM books WHERE id = ?", (book_id,))
+        row = cursor.fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "My Book"
+
+    def test_get_books_empty(self) -> None:
+        """Test get_books when no books exist"""
+        init_database()
+        result = get_books()
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    def test_get_books_with_data(self) -> None:
+        """Test get_books returns all books"""
+        init_database()
+        add_book("Book A")
+        add_book("Book B")
+        result = get_books()
+        assert len(result) == 2
+        titles = {b["title"] for b in result}
+        assert titles == {"Book A", "Book B"}
+
+    def test_remove_book(self) -> None:
+        """Test remove_book function"""
+        init_database()
+        book_id = add_book("To Remove")
+        remove_book(book_id)
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM books WHERE id = ?", (book_id,))
+        count = cursor.fetchone()[0]
+        conn.close()
+        assert count == 0
+
+    def test_add_book_author(self) -> None:
+        """Test add_book_author function"""
+        init_database()
+        book_id = add_book("Authored Book")
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("author1", "author1@example.com", "secret"),
+        )
+        user_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        add_book_author(book_id, user_id)
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM book_authors WHERE book_id = ? AND user_id = ?",
+            (book_id, user_id),
+        )
+        count = cursor.fetchone()[0]
+        conn.close()
+        assert count == 1
+
+    def test_remove_book_author(self) -> None:
+        """Test remove_book_author function"""
+        init_database()
+        book_id = add_book("Authored Book")
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("author2", "author2@example.com", "secret"),
+        )
+        user_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO book_authors (book_id, user_id) VALUES (?, ?)", (book_id, user_id)
+        )
+        conn.commit()
+        conn.close()
+
+        remove_book_author(book_id, user_id)
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM book_authors WHERE book_id = ? AND user_id = ?",
+            (book_id, user_id),
+        )
+        count = cursor.fetchone()[0]
+        conn.close()
+        assert count == 0
+
+    def test_get_book_authors(self) -> None:
+        """Test get_book_authors function"""
+        init_database()
+        book_id = add_book("Multi-Author Book")
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("alice", "alice@example.com", "secret"),
+        )
+        alice_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("bob", "bob@example.com", "secret"),
+        )
+        bob_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO book_authors (book_id, user_id) VALUES (?, ?)", (book_id, alice_id)
+        )
+        cursor.execute(
+            "INSERT INTO book_authors (book_id, user_id) VALUES (?, ?)", (book_id, bob_id)
+        )
+        conn.commit()
+        conn.close()
+
+        result = get_book_authors(book_id)
+        assert len(result) == 2
+        emails = {a["email"] for a in result}
+        assert emails == {"alice@example.com", "bob@example.com"}
+
+    def test_get_users_returns_all_users(self) -> None:
+        """get_users returns all registered users with id, username, email."""
+        init_database()
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("alice", "alice@example.com", "secret1"),
+        )
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("bob", "bob@example.com", "secret2"),
+        )
+        conn.commit()
+        conn.close()
+
+        result = get_users()
+        assert len(result) == 2
+        emails = {u["email"] for u in result}
+        assert "alice@example.com" in emails
+        assert "bob@example.com" in emails
+        for u in result:
+            assert "id" in u
+            assert "username" in u
+            assert "email" in u
+            assert "hashed_password" not in u
+
+    def test_get_users_empty(self) -> None:
+        """get_users returns an empty list when no users exist."""
+        init_database()
+        result = get_users()
+        assert result == []

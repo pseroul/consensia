@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, BookOpen, ChevronRight, Loader2, X, RotateCcw } from 'lucide-react';
-import { getTocStructure, updateTocStructure } from '../services/api';
+import { getTocStructure, updateTocStructure, getIdeas } from '../services/api';
+import { useBook } from '../contexts/BookContext';
 
 /**
  * Modal component for displaying full content of TOC items
@@ -173,7 +174,24 @@ const TocItem = ({ item, level = 1, onShowFullContent, allCollapsed }) => {
  * - Full content preview
  * - Content refresh capability
  */
+/**
+ * Recursively filter a TOC tree to only include leaf ideas whose titles are in allowedTitles.
+ * Headings with no remaining children are dropped.
+ */
+const filterTocByTitles = (items, allowedTitles) =>
+  items.reduce((acc, item) => {
+    if (item.type === 'heading') {
+      const children = filterTocByTitles(item.children ?? [], allowedTitles);
+      if (children.length > 0) acc.push({ ...item, children });
+    } else if (allowedTitles.has(item.title)) {
+      acc.push(item);
+    }
+    return acc;
+  }, []);
+
 const TableOfContents = () => {
+  const { selectedBook } = useBook() ?? {};
+
   // State management for component data
   const [tocStructure, setTocStructure] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -182,6 +200,27 @@ const TableOfContents = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [allCollapsed, setAllCollapsed] = useState(false);
+  const [bookIdeas, setBookIdeas] = useState(null);
+
+  // When a specific book is selected, fetch ideas to filter the TOC
+  useEffect(() => {
+    if (!selectedBook) {
+      setBookIdeas(null);
+      return;
+    }
+    getIdeas()
+      .then((res) => {
+        const titles = new Set(
+          res.data
+            .filter((idea) => idea.book_id === selectedBook.id)
+            .map((idea) => idea.title)
+        );
+        setBookIdeas(titles);
+      })
+      .catch(() => setBookIdeas(null));
+  }, [selectedBook]);
+
+  const visibleToc = bookIdeas ? filterTocByTitles(tocStructure, bookIdeas) : tocStructure;
 
   /**
    * Fetch the table of contents structure from the API
@@ -288,7 +327,7 @@ const TableOfContents = () => {
           </div>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Table of contents</h1>
-            <p className="text-gray-500 italic">{tocStructure.length} sections</p>
+            <p className="text-gray-500 italic">{visibleToc.length} sections</p>
           </div>
           <div className="ml-auto flex gap-2">
             <button
@@ -336,8 +375,8 @@ const TableOfContents = () => {
           </div>
         ) : (
           <div className="space-y-1">
-            {tocStructure.length > 0 ? (
-              tocStructure.map((item, index) => (
+            {visibleToc.length > 0 ? (
+              visibleToc.map((item, index) => (
                 <TocItem 
                   key={item.id || index} 
                   item={item} 

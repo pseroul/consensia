@@ -79,8 +79,8 @@ class TestMainAPI:
         # Mock the get_ideas function to return test data
         # Note: tags should be strings, not lists, to match the Pydantic model
         mock_get_ideas.return_value = [
-            {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1"},
-            {"id": 2, "title": "Test Idea 2", "content": "Content 2", "tags": "tag2"}
+            {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1", "book_id": 1},
+            {"id": 2, "title": "Test Idea 2", "content": "Content 2", "tags": "tag2", "book_id": 1}
         ]
 
         # Get authentication headers
@@ -98,7 +98,7 @@ class TestMainAPI:
         # Mock the get_idea_from_tags function
         # Note: tags should be strings, not lists, to match the Pydantic model
         mock_get_ideas_by_tags.return_value = [
-            {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1"}
+            {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1", "book_id": 1}
         ]
 
         # Get authentication headers
@@ -119,7 +119,7 @@ class TestMainAPI:
         # Mock the get_similar_idea function
         # Note: tags should be strings, not lists, to match the Pydantic model
         mock_get_similar_idea.return_value = [
-            {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1"}
+            {"id": 1, "title": "Test Idea 1", "content": "Content 1", "tags": "tag1", "book_id": 1}
         ]
 
         response = client.get("/ideas/search/test", headers=headers)
@@ -182,7 +182,7 @@ class TestMainAPI:
         # Mock the get_similar_idea function
         # Note: tags should be strings, not lists, to match the Pydantic model
         mock_get_similar_idea.return_value = [
-            {"id": 2, "title": "Similar Idea", "content": "Similar content", "tags": "tag1"}
+            {"id": 2, "title": "Similar Idea", "content": "Similar content", "tags": "tag1", "book_id": 1}
         ]
 
         response = client.get("/ideas/similar/TestIdea", headers=headers)
@@ -206,7 +206,8 @@ class TestMainAPI:
         idea_data = {
             "title": "New Idea",
             "content": "This is a new idea",
-            "tags": "tag1;tag2;tag3"
+            "tags": "tag1;tag2;tag3",
+            "book_id": 1
         }
 
         response = client.post("/ideas", json=idea_data, headers=headers)
@@ -215,7 +216,9 @@ class TestMainAPI:
         assert "id" in data
 
         # Verify that add_idea was called with correct parameters (using email instead of owner_id)
-        mock_add_idea.assert_called_once_with("New Idea", "This is a new idea", owner_email="test@example.com")
+        mock_add_idea.assert_called_once_with(
+            "New Idea", "This is a new idea", owner_email="test@example.com", book_id=1
+        )
 
         # Verify that tags were processed
         assert mock_add_tag.call_count == 3
@@ -230,10 +233,11 @@ class TestMainAPI:
         # Get authentication headers
         headers = self._get_auth_headers()
 
-        # Test without tags
+        # Test without tags but with book_id
         idea_data = {
             "title": "New Idea",
-            "content": "This is a new idea"
+            "content": "This is a new idea",
+            "book_id": 1
         }
 
         response = client.post("/ideas", json=idea_data, headers=headers)
@@ -321,7 +325,8 @@ class TestMainAPI:
             "id": 1,
             "title": "Updated Idea",
             "content": "Updated content",
-            "tags": "new-tag1;new-tag2"
+            "tags": "new-tag1;new-tag2",
+            "book_id": 1
         }
 
         response = client.put("/ideas/1", json=idea_data, headers=headers)
@@ -347,7 +352,8 @@ class TestMainAPI:
             json={
                 "id": 1,
                 "title": "Idea to Delete",
-                "content": "Content to delete"
+                "content": "Content to delete",
+                "book_id": 1
             },
             headers=headers
         )
@@ -542,7 +548,8 @@ class TestMainAPI:
 
             idea_data = {
                 "title": "New Idea",
-                "content": "This is a new idea"
+                "content": "This is a new idea",
+                "book_id": 1
             }
 
             response = client.post("/ideas", json=idea_data, headers=headers)
@@ -640,7 +647,8 @@ class TestMainAPI:
         idea_data = {
             "title": "New Idea",
             "content": "This is a new idea",
-            "tags": "tag1;tag2"
+            "tags": "tag1;tag2",
+            "book_id": 1
         }
 
         response = client.post("/ideas", json=idea_data, headers=headers)
@@ -995,7 +1003,8 @@ class TestEdgeCases:
             idea_data = {
                 "title": "Idea with Empty Tags",
                 "content": "Content",
-                "tags": ""
+                "tags": "",
+                "book_id": 1
             }
 
             response = client.post("/ideas", json=idea_data, headers=headers)
@@ -1016,7 +1025,8 @@ class TestEdgeCases:
                     idea_data = {
                         "title": "Idea with Whitespace Tags",
                         "content": "Content",
-                        "tags": "  tag1  ;  tag2  ;  tag3  "
+                        "tags": "  tag1  ;  tag2  ;  tag3  ",
+                        "book_id": 1
                     }
 
                     response = client.post("/ideas", json=idea_data, headers=headers)
@@ -1038,7 +1048,8 @@ class TestEdgeCases:
                     idea_data = {
                         "title": "Idea with Special Tags",
                         "content": "Content",
-                        "tags": "tag-1;tag_2;tag.3;tag@4"
+                        "tags": "tag-1;tag_2;tag.3;tag@4",
+                        "book_id": 1
                     }
 
                     response = client.post("/ideas", json=idea_data, headers=headers)
@@ -1060,7 +1071,8 @@ class TestEdgeCases:
                     idea_data = {
                         "title": "Idea with Duplicate Tags",
                         "content": "Content",
-                        "tags": "tag1;tag2;tag1;tag3;tag2"
+                        "tags": "tag1;tag2;tag1;tag3;tag2",
+                        "book_id": 1
                     }
 
                     response = client.post("/ideas", json=idea_data, headers=headers)
@@ -1082,7 +1094,8 @@ class TestEdgeCases:
 
             idea_data = {
                 "title": "Idea with Long Content",
-                "content": long_content
+                "content": long_content,
+                "book_id": 1
             }
 
             response = client.post("/ideas", json=idea_data, headers=headers)
@@ -1100,7 +1113,8 @@ class TestEdgeCases:
 
             idea_data = {
                 "title": "Idea with Special Chars: / \\ | ? * < >",
-                "content": "Content"
+                "content": "Content",
+                "book_id": 1
             }
 
             response = client.post("/ideas", json=idea_data, headers=headers)
@@ -1118,7 +1132,8 @@ class TestEdgeCases:
 
             idea_data = {
                 "title": "Idea with Unicode: 你好世界 🌍",
-                "content": "Content with unicode: café, naïve, résumé"
+                "content": "Content with unicode: café, naïve, résumé",
+                "book_id": 1
             }
 
             response = client.post("/ideas", json=idea_data, headers=headers)
@@ -1271,3 +1286,309 @@ class TestEdgeCases:
 
         response = client.post("/verify-otp", json=login_data)
         assert response.status_code == 422  # Validation error
+
+
+@pytest.mark.unit
+class TestBookAPI:
+    """Unit tests for book and book-author endpoints."""
+
+    def setup_method(self):
+        """Set up test fixtures before each test method."""
+        import tempfile
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.test_db = self._tmp.name
+        self._tmp.close()
+        os.environ["NAME_DB"] = self.test_db
+
+        from backend.data_handler import init_database
+        init_database()
+
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("testuser", "test@example.com", "hashed_password"),
+        )
+        self.user_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+    def teardown_method(self):
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
+
+    def _get_auth_headers(self):
+        login_data = {"email": "test@example.com", "otp_code": "123456"}
+        with patch("backend.main.verify_access", return_value=True):
+            response = client.post("/verify-otp", json=login_data)
+            assert response.status_code == 200
+            token = response.json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    # ----- GET /books -----
+
+    @patch("backend.main.get_books")
+    def test_get_all_books(self, mock_get_books):
+        """GET /books returns list of books."""
+        mock_get_books.return_value = [
+            {"id": 1, "title": "Book One"},
+            {"id": 2, "title": "Book Two"},
+        ]
+        headers = self._get_auth_headers()
+        response = client.get("/books", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["title"] == "Book One"
+
+    @patch("backend.main.get_books")
+    def test_get_all_books_empty(self, mock_get_books):
+        """GET /books returns empty list when no books exist."""
+        mock_get_books.return_value = []
+        headers = self._get_auth_headers()
+        response = client.get("/books", headers=headers)
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_get_books_requires_auth(self):
+        """GET /books returns 401 without a token."""
+        response = client.get("/books")
+        assert response.status_code == 401
+
+    @patch("backend.main.get_books")
+    def test_get_books_error_handling(self, mock_get_books):
+        """GET /books returns 500 on unexpected error."""
+        mock_get_books.side_effect = Exception("DB error")
+        headers = self._get_auth_headers()
+        response = client.get("/books", headers=headers)
+        assert response.status_code == 500
+        assert "Error retrieving books" in response.json()["detail"]
+
+    # ----- POST /books -----
+
+    @patch("backend.main.add_book")
+    def test_create_book(self, mock_add_book):
+        """POST /books creates a book and returns its id."""
+        mock_add_book.return_value = 42
+        headers = self._get_auth_headers()
+        response = client.post("/books", json={"title": "My New Book"}, headers=headers)
+        assert response.status_code == 200
+        assert response.json() == {"id": 42}
+        mock_add_book.assert_called_once_with("My New Book")
+
+    def test_create_book_requires_title(self):
+        """POST /books with missing title returns 422."""
+        headers = self._get_auth_headers()
+        response = client.post("/books", json={}, headers=headers)
+        assert response.status_code == 422
+
+    def test_create_book_requires_auth(self):
+        """POST /books returns 401 without a token."""
+        response = client.post("/books", json={"title": "No Auth"})
+        assert response.status_code == 401
+
+    @patch("backend.main.add_book")
+    def test_create_book_error_handling(self, mock_add_book):
+        """POST /books returns 500 on unexpected error."""
+        mock_add_book.side_effect = Exception("DB error")
+        headers = self._get_auth_headers()
+        response = client.post("/books", json={"title": "Bad Book"}, headers=headers)
+        assert response.status_code == 500
+        assert "Error creating book" in response.json()["detail"]
+
+    # ----- DELETE /books/{id} -----
+
+    @patch("backend.main.remove_book")
+    def test_delete_book(self, mock_remove_book):
+        """DELETE /books/{id} removes the book."""
+        headers = self._get_auth_headers()
+        response = client.delete("/books/7", headers=headers)
+        assert response.status_code == 200
+        assert response.json() == {"message": "Book '7' removed successfully"}
+        mock_remove_book.assert_called_once_with(7)
+
+    def test_delete_book_requires_auth(self):
+        """DELETE /books/{id} returns 401 without a token."""
+        response = client.delete("/books/1")
+        assert response.status_code == 401
+
+    @patch("backend.main.remove_book")
+    def test_delete_book_error_handling(self, mock_remove_book):
+        """DELETE /books/{id} returns 500 on unexpected error."""
+        mock_remove_book.side_effect = Exception("DB error")
+        headers = self._get_auth_headers()
+        response = client.delete("/books/1", headers=headers)
+        assert response.status_code == 500
+        assert "Error removing book" in response.json()["detail"]
+
+    # ----- GET /books/{id}/authors -----
+
+    @patch("backend.main.get_book_authors")
+    def test_get_book_authors(self, mock_get_book_authors):
+        """GET /books/{id}/authors returns the author list."""
+        mock_get_book_authors.return_value = [
+            {"id": 1, "username": "alice", "email": "alice@example.com"},
+            {"id": 2, "username": "bob", "email": "bob@example.com"},
+        ]
+        headers = self._get_auth_headers()
+        response = client.get("/books/3/authors", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["email"] == "alice@example.com"
+        mock_get_book_authors.assert_called_once_with(3)
+
+    @patch("backend.main.get_book_authors")
+    def test_get_book_authors_empty(self, mock_get_book_authors):
+        """GET /books/{id}/authors returns empty list when no authors."""
+        mock_get_book_authors.return_value = []
+        headers = self._get_auth_headers()
+        response = client.get("/books/5/authors", headers=headers)
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_get_book_authors_requires_auth(self):
+        """GET /books/{id}/authors returns 401 without a token."""
+        response = client.get("/books/1/authors")
+        assert response.status_code == 401
+
+    @patch("backend.main.get_book_authors")
+    def test_get_book_authors_error_handling(self, mock_get_book_authors):
+        """GET /books/{id}/authors returns 500 on unexpected error."""
+        mock_get_book_authors.side_effect = Exception("DB error")
+        headers = self._get_auth_headers()
+        response = client.get("/books/1/authors", headers=headers)
+        assert response.status_code == 500
+        assert "Error retrieving book authors" in response.json()["detail"]
+
+    # ----- POST /book-authors -----
+
+    @patch("backend.main.add_book_author")
+    def test_add_book_author(self, mock_add_book_author):
+        """POST /book-authors links a user to a book."""
+        headers = self._get_auth_headers()
+        response = client.post(
+            "/book-authors", json={"book_id": 2, "user_id": 5}, headers=headers
+        )
+        assert response.status_code == 200
+        assert response.json() == {"message": "User '5' added as author of book '2'"}
+        mock_add_book_author.assert_called_once_with(2, 5)
+
+    def test_add_book_author_requires_auth(self):
+        """POST /book-authors returns 401 without a token."""
+        response = client.post("/book-authors", json={"book_id": 1, "user_id": 1})
+        assert response.status_code == 401
+
+    def test_add_book_author_validation(self):
+        """POST /book-authors with missing fields returns 422."""
+        headers = self._get_auth_headers()
+        response = client.post("/book-authors", json={"book_id": 1}, headers=headers)
+        assert response.status_code == 422
+
+    @patch("backend.main.add_book_author")
+    def test_add_book_author_error_handling(self, mock_add_book_author):
+        """POST /book-authors returns 500 on unexpected error."""
+        mock_add_book_author.side_effect = Exception("DB error")
+        headers = self._get_auth_headers()
+        response = client.post(
+            "/book-authors", json={"book_id": 1, "user_id": 1}, headers=headers
+        )
+        assert response.status_code == 500
+        assert "Error adding book author" in response.json()["detail"]
+
+    # ----- DELETE /book-authors -----
+
+    @patch("backend.main.remove_book_author")
+    def test_remove_book_author(self, mock_remove_book_author):
+        """DELETE /book-authors unlinks a user from a book."""
+        headers = self._get_auth_headers()
+        response = client.request(
+            "DELETE", "/book-authors", json={"book_id": 2, "user_id": 5}, headers=headers
+        )
+        assert response.status_code == 200
+        assert response.json() == {"message": "User '5' removed from authors of book '2'"}
+        mock_remove_book_author.assert_called_once_with(2, 5)
+
+    def test_remove_book_author_requires_auth(self):
+        """DELETE /book-authors returns 401 without a token."""
+        response = client.request(
+            "DELETE", "/book-authors", json={"book_id": 1, "user_id": 1}
+        )
+        assert response.status_code == 401
+
+    @patch("backend.main.remove_book_author")
+    def test_remove_book_author_error_handling(self, mock_remove_book_author):
+        """DELETE /book-authors returns 500 on unexpected error."""
+        mock_remove_book_author.side_effect = Exception("DB error")
+        headers = self._get_auth_headers()
+        response = client.request(
+            "DELETE", "/book-authors", json={"book_id": 1, "user_id": 1}, headers=headers
+        )
+        assert response.status_code == 500
+        assert "Error removing book author" in response.json()["detail"]
+
+
+@pytest.mark.unit
+class TestUsersAPI:
+    """Unit tests for the GET /users endpoint."""
+
+    def setup_method(self):
+        import tempfile
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.test_db = self._tmp.name
+        self._tmp.close()
+        os.environ["NAME_DB"] = self.test_db
+        from backend.data_handler import init_database
+        init_database()
+        conn = sqlite3.connect(self.test_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
+            ("testuser", "test@example.com", "hashed_password"),
+        )
+        conn.commit()
+        conn.close()
+
+    def teardown_method(self):
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
+
+    def _get_auth_headers(self):
+        login_data = {"email": "test@example.com", "otp_code": "123456"}
+        with patch("backend.main.verify_access", return_value=True):
+            response = client.post("/verify-otp", json=login_data)
+        return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+    @patch("backend.main.get_users")
+    def test_get_all_users_returns_list(self, mock_get_users):
+        mock_get_users.return_value = [
+            {"id": 1, "username": "alice", "email": "alice@example.com"},
+            {"id": 2, "username": "bob",   "email": "bob@example.com"},
+        ]
+        headers = self._get_auth_headers()
+        response = client.get("/users", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["username"] == "alice"
+        assert data[1]["email"] == "bob@example.com"
+
+    @patch("backend.main.get_users")
+    def test_get_all_users_empty(self, mock_get_users):
+        mock_get_users.return_value = []
+        headers = self._get_auth_headers()
+        response = client.get("/users", headers=headers)
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_get_all_users_requires_auth(self):
+        response = client.get("/users")
+        assert response.status_code == 401
+
+    @patch("backend.main.get_users")
+    def test_get_all_users_error_handling(self, mock_get_users):
+        mock_get_users.side_effect = Exception("DB failure")
+        headers = self._get_auth_headers()
+        response = client.get("/users", headers=headers)
+        assert response.status_code == 500
+        assert "Error retrieving users" in response.json()["detail"]

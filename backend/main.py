@@ -15,7 +15,9 @@ from datetime import datetime, timedelta
 from data_handler import (
     init_database, get_ideas, get_user_ideas, get_idea_from_tags,
     get_content, get_tags, get_tags_from_idea, add_idea, add_tag,
-    add_relation, remove_idea, remove_tag, remove_relation, update_idea, get_similar_idea
+    add_relation, remove_idea, remove_tag, remove_relation, update_idea, get_similar_idea,
+    add_book, get_books, remove_book, add_book_author, remove_book_author, get_book_authors,
+    get_users
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -48,19 +50,43 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # Pydantic models
 class IdeaItem(BaseModel):
-    """Ideam model for idea items with title, content, and tags.
-    
+    """Data model for idea items with title, content, tags, and book.
+
     Attributes:
         id (int): The id of the idea.
         title (str): The name of the idea.
         content (str): The description of the idea item.
-        tags (Optional[str]): Tags associated with the idea item, 
+        tags (Optional[str]): Tags associated with the idea item,
                              separated by semicolons.
+        book_id (Optional[int]): ID of the book this idea belongs to.
     """
     id: Optional[int] = None
     title: str
     content: str
-    tags: Optional[str] = None #tags are semicolon-separated
+    tags: Optional[str] = None  # tags are semicolon-separated
+    book_id: Optional[int] = None
+
+
+class BookItem(BaseModel):
+    """Data model for books.
+
+    Attributes:
+        id (Optional[int]): The id of the book.
+        title (str): The title of the book.
+    """
+    id: Optional[int] = None
+    title: str
+
+
+class BookAuthorItem(BaseModel):
+    """Data model for book-author relationships.
+
+    Attributes:
+        book_id (int): The id of the book.
+        user_id (int): The id of the user (author).
+    """
+    book_id: int
+    user_id: int
 
 class TagItem(BaseModel):
     """Data model for tag items.
@@ -322,11 +348,13 @@ async def create_idea(data: IdeaItem, current_user: dict = Depends(get_current_u
     Raises:
         HTTPException: If there's an error adding the data to the database.
     """
+    user_email = current_user.get("email")
+    if not user_email:
+        raise HTTPException(status_code=400, detail="User email not found in token")
+    if data.book_id is None:
+        raise HTTPException(status_code=400, detail="book_id is required")
     try:
-        user_email = current_user.get("email")
-        if not user_email:
-            raise HTTPException(status_code=400, detail="User email not found in token")
-        new_id = add_idea(data.title, data.content, owner_email=user_email)
+        new_id = add_idea(data.title, data.content, owner_email=user_email, book_id=data.book_id)
         
         # Handle tags if provided - convert string to list if needed
         if data.tags and data.tags.strip():
@@ -495,6 +523,117 @@ async def delete_relation(relation: RelationItem, current_user: dict = Depends(g
         return {"message": f"Relation between '{relation.idea_id}' and '{relation.tag_name}' removed successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error removing relation: {str(e)}") from e
+# Book endpoints
+@app.get("/books", response_model=List[BookItem])
+async def get_all_books(current_user: dict = Depends(get_current_user)) -> List[dict]:
+    """Get all books.
+
+    Returns:
+        List[BookItem]: List of all books.
+    """
+    try:
+        return get_books()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving books: {str(e)}") from e
+
+
+@app.post("/books", response_model=dict)
+async def create_book(book: BookItem, current_user: dict = Depends(get_current_user)) -> dict:
+    """Create a new book.
+
+    Args:
+        book (BookItem): The book data to create.
+
+    Returns:
+        dict: The id of the created book.
+    """
+    try:
+        new_id = add_book(book.title)
+        return {"id": new_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating book: {str(e)}") from e
+
+
+@app.delete("/books/{book_id}", response_model=dict)
+async def delete_book(book_id: int, current_user: dict = Depends(get_current_user)) -> dict:
+    """Remove a book.
+
+    Args:
+        book_id (int): The id of the book to remove.
+
+    Returns:
+        dict: A success message.
+    """
+    try:
+        remove_book(book_id)
+        return {"message": f"Book '{book_id}' removed successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error removing book: {str(e)}") from e
+
+
+@app.get("/books/{book_id}/authors", response_model=List[dict])
+async def get_authors_for_book(book_id: int, current_user: dict = Depends(get_current_user)) -> List[dict]:
+    """Get all authors of a book.
+
+    Args:
+        book_id (int): The id of the book.
+
+    Returns:
+        List[dict]: List of user dicts (id, username, email).
+    """
+    try:
+        return get_book_authors(book_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving book authors: {str(e)}") from e
+
+
+@app.post("/book-authors", response_model=dict)
+async def create_book_author(item: BookAuthorItem, current_user: dict = Depends(get_current_user)) -> dict:
+    """Add a user as an author of a book.
+
+    Args:
+        item (BookAuthorItem): The book_id and user_id to link.
+
+    Returns:
+        dict: A success message.
+    """
+    try:
+        add_book_author(item.book_id, item.user_id)
+        return {"message": f"User '{item.user_id}' added as author of book '{item.book_id}'"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error adding book author: {str(e)}") from e
+
+
+@app.delete("/book-authors", response_model=dict)
+async def delete_book_author(item: BookAuthorItem, current_user: dict = Depends(get_current_user)) -> dict:
+    """Remove a user from the authors of a book.
+
+    Args:
+        item (BookAuthorItem): The book_id and user_id to unlink.
+
+    Returns:
+        dict: A success message.
+    """
+    try:
+        remove_book_author(item.book_id, item.user_id)
+        return {"message": f"User '{item.user_id}' removed from authors of book '{item.book_id}'"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error removing book author: {str(e)}") from e
+
+
+@app.get("/users", response_model=List[dict])
+async def get_all_users(current_user: dict = Depends(get_current_user)) -> List[dict]:
+    """List all registered users (id, username, email).
+
+    Returns:
+        List[dict]: List of user dicts.
+    """
+    try:
+        return get_users()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving users: {str(e)}") from e
+
+
 # Health check endpoint
 @app.get("/health")
 async def health_check() -> dict[str, str]:

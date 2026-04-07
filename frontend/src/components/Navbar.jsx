@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X, LogOut, Lightbulb, Home, Settings, User, Tag } from 'lucide-react';
+import { Menu, X, LogOut, Lightbulb, Home, User, Tag, BookOpen } from 'lucide-react';
+import BookSelector from './BookSelector';
 
 const Navbar = ({ isOpen: controlledIsOpen = false }) => {
   const [isOpen, setIsOpen] = useState(controlledIsOpen);
@@ -24,8 +25,11 @@ const Navbar = ({ isOpen: controlledIsOpen = false }) => {
           <span>Consensia</span>
         </div>
 
+        {/* Book selector */}
+        <BookSelector />
+
         {/* Bouton Menu (Burger) */}
-        <button 
+        <button
           onClick={toggleMenu}
           className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
         >
@@ -53,12 +57,20 @@ const Navbar = ({ isOpen: controlledIsOpen = false }) => {
               <User size={20} /> Table of contents
             </Link>
 
-            <Link 
-              to="/tags-ideas" 
+            <Link
+              to="/tags-ideas"
               onClick={toggleMenu}
               className="flex items-center gap-3 p-3 rounded-xl hover:bg-blue-50 text-gray-700 hover:text-blue-600 font-medium transition-all"
             >
               <Tag size={20} /> Tags & Ideas
+            </Link>
+
+            <Link
+              to="/books"
+              onClick={toggleMenu}
+              className="flex items-center gap-3 p-3 rounded-xl hover:bg-blue-50 text-gray-700 hover:text-blue-600 font-medium transition-all"
+            >
+              <BookOpen size={20} /> My Books
             </Link>
 
             <hr className="my-2 border-gray-100" />

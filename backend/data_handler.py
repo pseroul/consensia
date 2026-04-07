@@ -13,13 +13,15 @@ logger = logging.getLogger("uvicorn.error")
 def init_database() -> None:
     """
     Initialize the SQLite database with required tables.
-    
-    Creates four tables if they don't exist:
+
+    Creates six tables if they don't exist:
     - users: stores user informations
     - tags: stores tag information
-    - ideas: stores ideas with contents
-    - relations: manages many-to-many relationships between data and tags
-    
+    - books: stores books that group ideas
+    - ideas: stores ideas with contents, each belonging to a book
+    - relations: manages many-to-many relationships between ideas and tags
+    - book_authors: manages many-to-many relationships between books and users
+
     Returns:
         None
     """
@@ -40,12 +42,21 @@ def init_database() -> None:
     """)
 
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL
+    );
+    """)
+
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS ideas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         content TEXT NOT NULL,
         owner_id INTEGER NOT NULL,
-        FOREIGN KEY (owner_id) REFERENCES users (id)
+        book_id INTEGER NOT NULL,
+        FOREIGN KEY (owner_id) REFERENCES users (id),
+        FOREIGN KEY (book_id) REFERENCES books (id)
     );
     """)
 
@@ -56,6 +67,16 @@ def init_database() -> None:
         PRIMARY KEY (idea_id, tag_name),
         FOREIGN KEY (idea_id) REFERENCES ideas(id),
         FOREIGN KEY (tag_name) REFERENCES tags(name)
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS book_authors (
+        book_id INTEGER,
+        user_id INTEGER,
+        PRIMARY KEY (book_id, user_id),
+        FOREIGN KEY (book_id) REFERENCES books(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
     );
     """)
 
@@ -82,7 +103,7 @@ def get_idea_from_tags(tags: str) -> list[dict[Hashable, str]]:
         placeholders = ", ".join(["?"] * len(tags_list))
         conn = sqlite3.connect(os.getenv('NAME_DB'))
         query = f"""
-        SELECT DISTINCT i. id, i.title, i.content
+        SELECT DISTINCT i.id, i.title, i.content, i.book_id
         FROM ideas i
         JOIN relations r ON i.id = r.idea_id
         JOIN tags t ON r.tag_name = t.name
@@ -106,21 +127,22 @@ def get_ideas() -> list[dict[Hashable, Any]]:
     """
     conn = sqlite3.connect(os.getenv('NAME_DB'))
     query = """
-    SELECT 
-        i.id, 
-        i.title, 
-        i.content, 
+    SELECT
+        i.id,
+        i.title,
+        i.content,
+        i.book_id,
         GROUP_CONCAT(r.tag_name, ';') AS tags
-    FROM 
+    FROM
         ideas i
-    LEFT JOIN 
+    LEFT JOIN
         relations r ON i.id = r.idea_id
-    GROUP BY 
-        i.id, i.title, i.content;
+    GROUP BY
+        i.id, i.title, i.content, i.book_id;
     """
     df = pd.read_sql_query(query, conn)
     conn.close()
-    
+
     # Handle potential NaN values in the dataframe
     df = df.fillna('')
     return df.to_dict("records")
@@ -139,25 +161,26 @@ def get_user_ideas(user_email: str) -> list[dict[Hashable, Any]]:
     """
     conn = sqlite3.connect(os.getenv('NAME_DB'))
     query = """
-    SELECT 
-        i.id, 
-        i.title, 
-        i.content, 
+    SELECT
+        i.id,
+        i.title,
+        i.content,
+        i.book_id,
         GROUP_CONCAT(r.tag_name, ';') AS tags
-    FROM 
+    FROM
         ideas i
-    LEFT JOIN 
+    LEFT JOIN
         relations r ON i.id = r.idea_id
-    JOIN 
+    JOIN
         users u ON i.owner_id = u.id
-    WHERE 
+    WHERE
         u.email = ?
-    GROUP BY 
-        i.id, i.title, i.content;
+    GROUP BY
+        i.id, i.title, i.content, i.book_id;
     """
     df = pd.read_sql_query(query, conn, params=[user_email])
     conn.close()
-    
+
     # Handle potential NaN values in the dataframe
     df = df.fillna('')
     return df.to_dict("records")
@@ -237,19 +260,20 @@ def get_similar_idea(idea: str) -> list[dict[str, Any]]:
     placeholders = ", ".join(["?"] * len(titles))
     conn = sqlite3.connect(os.getenv('NAME_DB'))
     query = f"""
-    SELECT 
-        i.id, 
-        i.title, 
-        i.content, 
+    SELECT
+        i.id,
+        i.title,
+        i.content,
+        i.book_id,
         GROUP_CONCAT(r.tag_name, ';') AS tags
-    FROM 
+    FROM
         ideas i
-    LEFT JOIN 
+    LEFT JOIN
         relations r ON i.id = r.idea_id
     WHERE
         i.title IN ({placeholders})
-    GROUP BY 
-        i.id, i.title, i.content;
+    GROUP BY
+        i.id, i.title, i.content, i.book_id;
     """
     df = pd.read_sql_query(query, conn, params=titles)
     conn.close()
@@ -259,18 +283,19 @@ def get_similar_idea(idea: str) -> list[dict[str, Any]]:
     return df.to_dict("records")
 
 # ADD FUNCTIONS
-def add_idea(title: str, content: str, owner_email: str) -> int:
+def add_idea(title: str, content: str, owner_email: str, book_id: int) -> int:
     """
     Add a new idea to the database.
-    
+
     Inserts a new record into the ideas table and adds the corresponding
     embedding to the ChromaClient.
-    
+
     Args:
         title (str): Name of the idea to add
         content (str): content of the idea to add
         owner_email (str): Email of the idea's owner
-        
+        book_id (int): ID of the book this idea belongs to
+
     Returns:
         int: the id of the new idea
     """
@@ -287,10 +312,10 @@ def add_idea(title: str, content: str, owner_email: str) -> int:
             logger.info(f"Error: User with email '{owner_email}' not found.")
             return -1
         owner_id = result[0]
-        
+
         cursor.execute(
-            "INSERT INTO ideas (title, content, owner_id) VALUES (?, ?, ?)",
-            (title, content, owner_id)
+            "INSERT INTO ideas (title, content, owner_id, book_id) VALUES (?, ?, ?, ?)",
+            (title, content, owner_id, book_id)
         )
         conn.commit()
         new_id = cursor.lastrowid
@@ -524,10 +549,158 @@ def embed_all_ideas() -> None:
         logger.info(f"Error in embed_all_ideas: {e}")
         raise
 
+# BOOK FUNCTIONS
+def add_book(title: str) -> int:
+    """
+    Add a new book to the database.
+
+    Args:
+        title (str): Title of the book
+
+    Returns:
+        int: the id of the new book, or -1 on error
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO books (title) VALUES (?)", (title,))
+        conn.commit()
+        new_id = cursor.lastrowid
+        logger.info(f"Book '{title}' added successfully.")
+        return new_id
+    except sqlite3.Error as e:
+        logger.info(f"Error adding book '{title}': {e}")
+        return -1
+    finally:
+        conn.close()
+
+
+def get_books() -> list[dict[Any, Any]]:
+    """
+    Retrieve all books from the database.
+
+    Returns:
+        list[dict]: List of dictionaries containing all books
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    df = pd.read_sql_query("SELECT id, title FROM books", conn)
+    conn.close()
+    return df.to_dict("records")
+
+
+def remove_book(book_id: int) -> None:
+    """
+    Remove a book from the database.
+
+    Args:
+        book_id (int): ID of the book to remove
+
+    Returns:
+        None
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM books WHERE id = ?", (book_id,))
+        conn.commit()
+        logger.info(f"Book '{book_id}' removed successfully.")
+    except sqlite3.Error as e:
+        logger.info(f"Error deleting book: {e}")
+    finally:
+        conn.close()
+
+
+def add_book_author(book_id: int, user_id: int) -> None:
+    """
+    Add a user as an author of a book.
+
+    Args:
+        book_id (int): ID of the book
+        user_id (int): ID of the user
+
+    Returns:
+        None
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO book_authors (book_id, user_id) VALUES (?, ?)",
+            (book_id, user_id)
+        )
+        conn.commit()
+        logger.info(f"User '{user_id}' added as author of book '{book_id}'.")
+    except sqlite3.IntegrityError:
+        logger.info("Error: This book-author relation already exists or foreign keys are invalid.")
+    finally:
+        conn.close()
+
+
+def remove_book_author(book_id: int, user_id: int) -> None:
+    """
+    Remove a user from the authors of a book.
+
+    Args:
+        book_id (int): ID of the book
+        user_id (int): ID of the user
+
+    Returns:
+        None
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "DELETE FROM book_authors WHERE book_id = ? AND user_id = ?",
+            (book_id, user_id)
+        )
+        conn.commit()
+        logger.info(f"User '{user_id}' removed from authors of book '{book_id}'.")
+    except sqlite3.Error as e:
+        logger.info(f"Error removing book author: {e}")
+    finally:
+        conn.close()
+
+
+def get_book_authors(book_id: int) -> list[dict[Any, Any]]:
+    """
+    Retrieve all authors of a book.
+
+    Args:
+        book_id (int): ID of the book
+
+    Returns:
+        list[dict]: List of user dicts (id, username, email) who authored the book
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    query = """
+    SELECT u.id, u.username, u.email
+    FROM users u
+    JOIN book_authors ba ON u.id = ba.user_id
+    WHERE ba.book_id = ?
+    """
+    df = pd.read_sql_query(query, conn, params=[book_id])
+    conn.close()
+    return df.to_dict("records")
+
+
+def get_users() -> list[dict[Any, Any]]:
+    """
+    Retrieve all users from the database.
+
+    Returns:
+        list[dict]: List of user dicts containing id, username, and email
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    df = pd.read_sql_query("SELECT id, username, email FROM users", conn)
+    conn.close()
+    return df.to_dict("records")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Regenerate all embeddings')
     parser.add_argument('-e', '--embedding', help='regenerate embeddings for chromadb', action="store_true")
     args = parser.parse_args()
     set_env_var()
-    if args.embedding: 
+    if args.embedding:
         embed_all_ideas()

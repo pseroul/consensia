@@ -39,7 +39,7 @@ class TestTagCRUD:
         tags = client.get("/tags", headers=alice["headers"]).json()
         assert not any(t["name"] == "to_delete" for t in tags)
 
-    def test_delete_tag_does_not_cascade_to_relations(self, client, alice):
+    def test_delete_tag_does_not_cascade_to_relations(self, client, alice, book):
         """
         SQLite FK cascade requires 'PRAGMA foreign_keys = ON', which the current
         codebase does NOT set. Deleting a tag therefore leaves its relation rows
@@ -51,7 +51,7 @@ class TestTagCRUD:
         """
         idea_id = client.post(
             "/ideas",
-            json={"title": "Cascaded Idea", "content": "C", "tags": "cascade_tag"},
+            json={"title": "Cascaded Idea", "content": "C", "tags": "cascade_tag", "book_id": book},
             headers=alice["headers"],
         ).json()["id"]
 
@@ -69,10 +69,10 @@ class TestTagCRUD:
 
 @pytest.mark.integration
 class TestRelationManagement:
-    def test_create_relation_manually(self, client, alice):
+    def test_create_relation_manually(self, client, alice, book):
         idea_id = client.post(
             "/ideas",
-            json={"title": "Relation Idea", "content": "C"},
+            json={"title": "Relation Idea", "content": "C", "book_id": book},
             headers=alice["headers"],
         ).json()["id"]
         client.post("/tags", json={"name": "manual_tag"}, headers=alice["headers"])
@@ -87,12 +87,12 @@ class TestRelationManagement:
         tags = client.get(f"/ideas/{idea_id}/tags", headers=alice["headers"]).json()
         assert "manual_tag" in tags
 
-    def test_delete_relation_removes_only_that_link(self, client, alice):
+    def test_delete_relation_removes_only_that_link(self, client, alice, book):
         # NOTE: DELETE /relations requires a request body (RelationItem).
         # httpx.Client.delete() does not accept json=; use client.request() instead.
         idea_id = client.post(
             "/ideas",
-            json={"title": "Multi-Tag Idea", "content": "C", "tags": "keep;remove"},
+            json={"title": "Multi-Tag Idea", "content": "C", "tags": "keep;remove", "book_id": book},
             headers=alice["headers"],
         ).json()["id"]
 
@@ -107,10 +107,10 @@ class TestRelationManagement:
         assert "keep" in tags
         assert "remove" not in tags
 
-    def test_delete_relation_keeps_the_tag_itself(self, client, alice):
+    def test_delete_relation_keeps_the_tag_itself(self, client, alice, book):
         idea_id = client.post(
             "/ideas",
-            json={"title": "Orphan Tag Test", "content": "C", "tags": "orphan"},
+            json={"title": "Orphan Tag Test", "content": "C", "tags": "orphan", "book_id": book},
             headers=alice["headers"],
         ).json()["id"]
 
@@ -128,15 +128,15 @@ class TestRelationManagement:
 
 @pytest.mark.integration
 class TestFilterByTag:
-    def test_filter_by_single_tag_returns_matching_ideas(self, client, alice):
+    def test_filter_by_single_tag_returns_matching_ideas(self, client, alice, book):
         client.post(
             "/ideas",
-            json={"title": "ML Idea", "content": "C", "tags": "ml"},
+            json={"title": "ML Idea", "content": "C", "tags": "ml", "book_id": book},
             headers=alice["headers"],
         )
         client.post(
             "/ideas",
-            json={"title": "Python Idea", "content": "C", "tags": "python"},
+            json={"title": "Python Idea", "content": "C", "tags": "python", "book_id": book},
             headers=alice["headers"],
         )
 
@@ -146,24 +146,24 @@ class TestFilterByTag:
         assert "ML Idea" in titles
         assert "Python Idea" not in titles
 
-    def test_filter_by_multiple_tags_returns_union(self, client, alice):
+    def test_filter_by_multiple_tags_returns_union(self, client, alice, book):
         """
         Semicolon-separated tags in the URL path → get_idea_from_tags splits on ';'
         and returns ideas matching ANY of the supplied tags.
         """
         client.post(
             "/ideas",
-            json={"title": "Alpha", "content": "C", "tags": "alpha"},
+            json={"title": "Alpha", "content": "C", "tags": "alpha", "book_id": book},
             headers=alice["headers"],
         )
         client.post(
             "/ideas",
-            json={"title": "Beta", "content": "C", "tags": "beta"},
+            json={"title": "Beta", "content": "C", "tags": "beta", "book_id": book},
             headers=alice["headers"],
         )
         client.post(
             "/ideas",
-            json={"title": "Gamma", "content": "C", "tags": "gamma"},
+            json={"title": "Gamma", "content": "C", "tags": "gamma", "book_id": book},
             headers=alice["headers"],
         )
 
@@ -175,10 +175,10 @@ class TestFilterByTag:
         assert "Beta" in titles
         assert "Gamma" not in titles
 
-    def test_filter_with_no_matching_tag_returns_empty(self, client, alice):
+    def test_filter_with_no_matching_tag_returns_empty(self, client, alice, book):
         client.post(
             "/ideas",
-            json={"title": "Untagged Idea", "content": "C", "tags": "sometag"},
+            json={"title": "Untagged Idea", "content": "C", "tags": "sometag", "book_id": book},
             headers=alice["headers"],
         )
 

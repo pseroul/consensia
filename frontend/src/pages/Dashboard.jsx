@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Trash2, Edit3, Loader2, Lightbulb } from 'lucide-react';
 import { getIdeas, getUserIdeas, createIdea, deleteIdea, updateIdea, getSimilarIdeas } from '../services/api';
 import IdeaModal from '../components/IdeaModal';
+import { useBook } from '../contexts/BookContext';
 
 /**
  * Dashboard Component - Main page for managing ideas
@@ -22,6 +23,8 @@ import IdeaModal from '../components/IdeaModal';
  * - Similar ideas search functionality
  */
 const Dashboard = () => {
+  const { selectedBook } = useBook() ?? {};
+
   // State management for all component data
   const [ideas, setIdeas] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -128,10 +131,12 @@ const Dashboard = () => {
    */
   const getFilteredIdeas = () => {
     if (showSimilarResults) {
-      return similarIdeas;
+      return similarIdeas.filter(
+        idea => !selectedBook || idea.book_id === selectedBook.id
+      );
     }
-    
     return ideas.filter(idea => {
+      if (selectedBook && idea.book_id !== selectedBook.id) return false;
       const name = idea.title ? idea.title.toLowerCase() : "";
       const description = idea.content ? idea.content.toLowerCase() : "";
       const tags = idea.tags ? idea.tags.toLowerCase() : "";
@@ -141,9 +146,8 @@ const Dashboard = () => {
   };
 
   // Load ideas when component mounts or when filter changes
-  useEffect(() => {
-    fetchIdeas();
-  }, [showMyIdeasOnly]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchIdeas identity changes on every render; showMyIdeasOnly is the real trigger
+  useEffect(() => { fetchIdeas(); }, [showMyIdeasOnly]);
 
   // Get filtered ideas for display
   const filteredIdeas = getFilteredIdeas();
@@ -229,12 +233,14 @@ const Dashboard = () => {
           </button>
           
           {/* New Idea Button */}
-          <button 
-            onClick={() => { 
-              setEditingIdea(null); 
-              setIsModalOpen(true); 
+          <button
+            onClick={() => {
+              setEditingIdea(null);
+              setIsModalOpen(true);
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg flex items-center gap-2 transition-colors"
+            disabled={!selectedBook}
+            title={!selectedBook ? 'Select a book first' : undefined}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white p-2 rounded-lg flex items-center gap-2 transition-colors"
           >
             <Plus size={20} />
             <span className="hidden md:inline">New</span>
@@ -301,11 +307,12 @@ const Dashboard = () => {
       )}
 
       {/* Idea Creation/Edit Modal */}
-      <IdeaModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+      <IdeaModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
         onSave={handleSaveIdea}
         initialData={editingIdea}
+        bookId={selectedBook?.id}
       />
     </div>
   );
