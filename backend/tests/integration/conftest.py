@@ -1,5 +1,5 @@
 """
-Integration test configuration for Brainiac5 backend.
+Integration test configuration for Consensia backend.
 
 Design goals:
 - Real SQLite database (fresh temp file per test)
@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.abspath(_repo_root))
 # ---------------------------------------------------------------------------
 import tempfile as _tempfile
 
-_bootstrap_tmp = _tempfile.mkdtemp(prefix="brainiac5_bootstrap_")
+_bootstrap_tmp = _tempfile.mkdtemp(prefix="consensia_bootstrap_")
 os.environ.setdefault("NAME_DB", os.path.join(_bootstrap_tmp, "bootstrap.db"))
 os.environ.setdefault("CHROMA_DB", os.path.join(_bootstrap_tmp, "chroma"))
 os.environ.setdefault("TOC_CACHE_PATH", os.path.join(_bootstrap_tmp, "toc.json"))

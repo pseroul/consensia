@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Brainiac5 is a full-stack idea management app with semantic clustering. Backend: FastAPI + SQLite + ChromaDB. Frontend: React + Vite + Tailwind. Authentication: Google Authenticator (TOTP) + JWT. Deployed on Raspberry Pi with nginx + Gunicorn.
+Consensia is a full-stack idea management app with semantic clustering. Backend: FastAPI + SQLite + ChromaDB. Frontend: React + Vite + Tailwind. Authentication: Google Authenticator (TOTP) + JWT. Deployed on Raspberry Pi with nginx + Gunicorn.
 
 ## Commands
 
@@ -101,6 +101,6 @@ All non-auth endpoints require Bearer token. Key routes:
 - Both enforce 80% coverage threshold
 
 ## Deployment Notes
-- nginx serves frontend from `/var/www/html/brainiac5/`, proxies `/api/` → `127.0.0.1:8000`
+- nginx serves frontend from `/var/www/html/consensia/`, proxies `/api/` → `127.0.0.1:8000`
 - Gunicorn: `gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:app --bind 127.0.0.1:8000`
 - On Raspberry Pi 4 (aarch64), PyTorch may require `torch==2.6.0+cpu` to avoid "Illegal Instruction" errors

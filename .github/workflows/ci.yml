@@ -87,7 +87,7 @@ jobs:
             cd frontend
             npm ci --prefer-offline
             VITE_API_URL=${{ secrets.VITE_API_URL }} npm run build
-            sudo cp -r dist/. /var/www/html/brainiac5/
+            sudo cp -r dist/. /var/www/html/consensia/
 
             echo "==> Updating backend dependencies"
             cd ../backend
@@ -95,6 +95,6 @@ jobs:
             pip install -r requirements.txt --quiet
 
             echo "==> Restarting backend service"
-            sudo systemctl restart brainiac5
+            sudo systemctl restart consensia
 
             echo "==> Done"

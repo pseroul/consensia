@@ -29,7 +29,7 @@ sudo apt install nginx
 ```
 
 Configure nginx to serve your application
-- Create file */etc/nginx/sites-available/brainiac5* and paste the following code:
+- Create file */etc/nginx/sites-available/consensia* and paste the following code:
 ```bash
 server {
     listen 80;
@@ -37,7 +37,7 @@ server {
 
     # 1. Front-end (React)
     location / {
-        root /var/www/html/brainiac5;
+        root /var/www/html/consensia;
         index index.html;
         try_files $uri /index.html;
     }
@@ -52,7 +52,7 @@ server {
 ```
   - Add symbolic link to unabled site
 ```bash
-sudo ln -s /etc/nginx/sites-available/brainiac5 /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/consensia /etc/nginx/sites-enabled/
 ```
   - Restart nginx
 ```bash
@@ -64,19 +64,19 @@ Gunicorn is a production server that restarts by itself if something bad append.
  To go into production, use gunicorn.
 
 ```bash
-sudo nano /etc/systemd/system/brainiac5.service
+sudo nano /etc/systemd/system/consensia.service
 ```
 With file content:
 ```bash
 [Unit]
-Description=Gunicorn instance to serve Brainiac 5
+Description=Gunicorn instance to serve Consensia
 After=network.target
 
 [Service]
 User=[your user]
-WorkingDirectory=/home/[your user]/brainiac5/backend
-Environment="PATH=/home/[your user]/brainiac5/backend/venv/bin"
-ExecStart=/home/[your user]/brainiac5/backend/venv/bin/gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:app --bind 127.0.0.1:8000
+WorkingDirectory=/home/[your user]/consensia/backend
+Environment="PATH=/home/[your user]/consensia/backend/venv/bin"
+ExecStart=/home/[your user]/consensia/backend/venv/bin/gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:app --bind 127.0.0.1:8000
 
 [Install]
 WantedBy=multi-user.target
@@ -85,12 +85,12 @@ WantedBy=multi-user.target
 Then restart the service
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl restart brainiac5.service
+sudo systemctl restart consensia.service
 ```
 
 Allow the server to launch the service after reboot: 
 ```bash
-sudo systemctl enable brainiac5.service
+sudo systemctl enable consensia.service
 ```
 
 ## Use a domain name instead of a public IP
@@ -107,7 +107,7 @@ In your nginx configuration file, replace your **[your_public_ip_address]** by *
 > Warning: this is only feasible if you have a domain name and not a public IP address.
 
 1. Modify nginx
-In */etc/nginx/sites-enabled/brainiac5* replace `server_name [your_public_ip_address];`with `server_name [your_domain.com] [www.yourdomain.com];`.
+In */etc/nginx/sites-enabled/consensia* replace `server_name [your_public_ip_address];`with `server_name [your_domain.com] [www.yourdomain.com];`.
 
 2. Install and run Certbot:
 ```bash

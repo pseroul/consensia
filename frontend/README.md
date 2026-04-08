@@ -56,9 +56,9 @@ git pull
 
 Then move it to the location served by nginx:
 ```bash
-sudo mkdir /var/www/html/brainiac5/
-sudo rm -Rf /var/www/html/brainiac5/*
-sudo cp -r frontend/dist/* /var/www/html/brainiac5/
+sudo mkdir /var/www/html/consensia/
+sudo rm -Rf /var/www/html/consensia/*
+sudo cp -r frontend/dist/* /var/www/html/consensia/
 ```
 
 it is a good thing to reload nginx: 
