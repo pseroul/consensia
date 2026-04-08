@@ -202,9 +202,13 @@ class EmbeddingAnalyzer:
             )
 
         logger.debug("EmbeddingAnalyzer: reducing %d embeddings with UMAP", n)
+        # UMAP requires n_neighbors < n; its spectral init requests n_components+1
+        # eigenvectors so we need n_components + 1 < n, i.e. n_components <= n - 2.
+        n_neighbors = max(2, min(self._UMAP_NEIGHBORS, n - 1))
+        n_components = max(1, min(self._UMAP_COMPONENTS, n - 2))
         reduced = umap.UMAP(
-            n_neighbors=self._UMAP_NEIGHBORS,
-            n_components=self._UMAP_COMPONENTS,
+            n_neighbors=n_neighbors,
+            n_components=n_components,
             metric="cosine",
             low_memory=True,
             random_state=self._RANDOM_STATE,

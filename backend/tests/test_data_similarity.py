@@ -175,6 +175,25 @@ class TestEmbeddingAnalyzer:
         result = analyzer.analyze(_random_embeddings(20, dim=16))
         assert result.labels.dtype.kind == "i"
 
+    def test_intermediate_dataset_does_not_raise(self):
+        """n between min_cluster_size*2 (6) and UMAP n_neighbors (15) must not raise.
+
+        Previously n_neighbors=15 was passed to UMAP with fewer than 15 samples,
+        causing a ValueError that propagated as a 500 on POST /toc/update.
+        """
+        analyzer = EmbeddingAnalyzer(min_cluster_size=3)
+        for n in (6, 8, 10, 14, 15):
+            result = analyzer.analyze(_random_embeddings(n, dim=16))
+            assert result.labels.shape == (n,), f"labels shape mismatch for n={n}"
+            assert result.originalities.shape == (n,), f"originalities shape mismatch for n={n}"
+
+    def test_intermediate_dataset_originalities_in_unit_range(self):
+        """Originalities for intermediate-sized datasets stay within [0, 1]."""
+        analyzer = EmbeddingAnalyzer(min_cluster_size=3)
+        result = analyzer.analyze(_random_embeddings(10, dim=16))
+        assert result.originalities.min() >= 0.0
+        assert result.originalities.max() <= 1.0
+
 
 # ---------------------------------------------------------------------------
 # TitleGenerator
