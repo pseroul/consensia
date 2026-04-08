@@ -11,6 +11,7 @@ from backend.data_similarity import (
     TocEntry,
     FileTocCache,
     EmbeddingAnalyzer,
+    ConstrainedClusteringAnalyzer,
     TitleGenerator,
     TocTreeBuilder,
     DataSimilarity,
@@ -193,6 +194,59 @@ class TestEmbeddingAnalyzer:
         result = analyzer.analyze(_random_embeddings(10, dim=16))
         assert result.originalities.min() >= 0.0
         assert result.originalities.max() <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# ConstrainedClusteringAnalyzer
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestConstrainedClusteringAnalyzer:
+    def test_small_dataset_fallback(self):
+        """Fewer than 4 points → labels=arange(n), originalities all 1."""
+        analyzer = ConstrainedClusteringAnalyzer()
+        result = analyzer.analyze(_random_embeddings(3))
+        assert len(result.labels) == 3
+        np.testing.assert_array_equal(result.originalities, np.ones(3))
+
+    def test_no_noise_labels(self):
+        """AgglomerativeClustering must never produce -1 labels."""
+        analyzer = ConstrainedClusteringAnalyzer(min_clusters=2, max_clusters=5)
+        result = analyzer.analyze(_random_embeddings(20, dim=16))
+        assert -1 not in result.labels
+
+    def test_output_shapes_match_input(self):
+        analyzer = ConstrainedClusteringAnalyzer(min_clusters=2, max_clusters=5)
+        n = 20
+        result = analyzer.analyze(_random_embeddings(n, dim=16))
+        assert result.labels.shape == (n,)
+        assert result.originalities.shape == (n,)
+
+    def test_originalities_in_unit_range(self):
+        analyzer = ConstrainedClusteringAnalyzer(min_clusters=2, max_clusters=5)
+        result = analyzer.analyze(_random_embeddings(20, dim=16))
+        assert result.originalities.min() >= 0.0
+        assert result.originalities.max() <= 1.0
+
+    def test_labels_contain_integers(self):
+        analyzer = ConstrainedClusteringAnalyzer(min_clusters=2, max_clusters=5)
+        result = analyzer.analyze(_random_embeddings(20, dim=16))
+        assert result.labels.dtype.kind == "i"
+
+    def test_intermediate_dataset_does_not_raise(self):
+        """Sizes between fallback threshold and UMAP n_neighbors must not raise."""
+        analyzer = ConstrainedClusteringAnalyzer(min_clusters=2, max_clusters=4)
+        for n in (4, 6, 8, 10, 14, 15):
+            result = analyzer.analyze(_random_embeddings(n, dim=16))
+            assert result.labels.shape == (n,), f"labels shape mismatch for n={n}"
+            assert result.originalities.shape == (n,), f"originalities shape mismatch for n={n}"
+
+    def test_cluster_count_bounded_by_min_max(self):
+        """Number of clusters should respect min_clusters / max_clusters when data allows."""
+        analyzer = ConstrainedClusteringAnalyzer(min_clusters=2, max_clusters=4)
+        result = analyzer.analyze(_random_embeddings(30, dim=16, seed=7))
+        n_clusters = len(np.unique(result.labels))
+        assert 1 <= n_clusters <= 4
 
 
 # ---------------------------------------------------------------------------

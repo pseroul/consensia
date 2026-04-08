@@ -8,6 +8,8 @@ from typing import Any, Protocol
 
 import umap
 import hdbscan
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -32,14 +34,14 @@ class IdeaData:
 @dataclass
 class ClusteringResult:
     """
-    Unified output of EmbeddingAnalyzer.
+    Unified output of clustering analyzers.
 
-    Both fields are derived from the same UMAP-reduced space, ensuring full
+    Both fields are derived from the same reduced space, ensuring full
     consistency between cluster membership and originality scores.
 
     Attributes:
         labels:        Integer cluster label per idea.
-                       -1 means HDBSCAN classified the point as noise
+                       -1 means the point is classified as noise
                        (i.e. the idea is genuinely isolated → leaf node).
         originalities: Normalised outlier score in [0, 1] per idea.
                        Higher = more original / atypical.
@@ -136,7 +138,7 @@ class FileTocCache:
 
 
 # ---------------------------------------------------------------------------
-# EmbeddingAnalyzer – Single Responsibility: clustering + originality in one pass
+# EmbeddingAnalyzer – UMAP + HDBSCAN (kept for backward compatibility)
 # ---------------------------------------------------------------------------
 
 class EmbeddingAnalyzer:
@@ -144,32 +146,9 @@ class EmbeddingAnalyzer:
     Reduce embeddings with UMAP then run HDBSCAN once to obtain both
     cluster labels and originality scores.
 
-    Why HDBSCAN replaces the previous AgglomerativeClustering + LOF pair:
-
-    1. Consistency
-       Both outputs (labels, outlier_scores_) come from the same density model
-       fitted in the same UMAP-reduced space.
-       Previously, originality was computed in 10-D UMAP space while clustering
-       ran on raw ~768-D embeddings — a spatial mismatch that could make a
-       point appear "original" yet land inside a dense cluster.
-
-    2. Single pass
-       HDBSCAN.outlier_scores_ is a by-product of fit(); no second model (LOF)
-       is needed, halving the compute cost.
-
-    3. Adaptive clusters
-       HDBSCAN discovers the natural groupings in the data without a fixed
-       n_clusters parameter. AgglomerativeClustering with n_clusters=sqrt(N)
-       forced equal-size splits that ignored density variations.
-
-    4. Noise handling
-       Points labelled -1 are genuinely isolated ideas; they become singleton
-       leaf nodes rather than being forced into the nearest cluster.
-
-    Trade-offs:
-    - min_cluster_size must be tuned (default 3 works for prose-length ideas).
-    - On very small datasets (< 2 * min_cluster_size) the method falls back to
-      treating every point as its own cluster with full originality.
+    Note: HDBSCAN produces noise points (label=-1) for ideas in low-density
+    regions.  For a book-like TOC structure prefer ConstrainedClusteringAnalyzer
+    which uses AgglomerativeClustering and guarantees no noise points.
     """
 
     _UMAP_NEIGHBORS: int = 15
@@ -180,15 +159,6 @@ class EmbeddingAnalyzer:
         self._min_cluster_size = min_cluster_size
 
     def analyze(self, embeddings: list[list[float]]) -> ClusteringResult:
-        """
-        Run the full UMAP → HDBSCAN pipeline.
-
-        Args:
-            embeddings: Raw embedding vectors of shape (N, D).
-
-        Returns:
-            ClusteringResult with consistent labels and originality scores.
-        """
         X = np.array(embeddings, dtype="float32")
         n = len(X)
 
@@ -202,8 +172,6 @@ class EmbeddingAnalyzer:
             )
 
         logger.debug("EmbeddingAnalyzer: reducing %d embeddings with UMAP", n)
-        # UMAP requires n_neighbors < n; its spectral init requests n_components+1
-        # eigenvectors so we need n_components + 1 < n, i.e. n_components <= n - 2.
         n_neighbors = max(2, min(self._UMAP_NEIGHBORS, n - 1))
         n_components = max(1, min(self._UMAP_COMPONENTS, n - 2))
         reduced = umap.UMAP(
@@ -217,13 +185,11 @@ class EmbeddingAnalyzer:
         logger.debug("EmbeddingAnalyzer: fitting HDBSCAN")
         clusterer = hdbscan.HDBSCAN(
             min_cluster_size=self._min_cluster_size,
-            metric="euclidean",    # UMAP output is Euclidean-friendly
-            prediction_data=True,  # enables soft membership if needed later
+            metric="euclidean",
+            prediction_data=True,
         )
         clusterer.fit(reduced)
 
-        # outlier_scores_:  0   = dense core member  → low originality
-        #                  high = peripheral / isolated → high originality
         originalities: np.ndarray = MinMaxScaler().fit_transform(
             clusterer.outlier_scores_.reshape(-1, 1)
         ).flatten()
@@ -238,6 +204,107 @@ class EmbeddingAnalyzer:
             labels=clusterer.labels_,
             originalities=originalities,
         )
+
+
+# ---------------------------------------------------------------------------
+# ConstrainedClusteringAnalyzer – UMAP + AgglomerativeClustering
+# ---------------------------------------------------------------------------
+
+class ConstrainedClusteringAnalyzer:
+    """
+    Constrained clustering that produces structured, book-like TOC hierarchies.
+
+    Unlike HDBSCAN, AgglomerativeClustering assigns every point to a cluster —
+    there are no noise points.  This ensures the TOC has well-populated sections
+    and chapters rather than a large number of isolated level-1 ideas.
+
+    Algorithm:
+    1. Reduce with UMAP (cosine metric, 5 components).
+    2. Try each k in [min_clusters, max_clusters]; pick the k that maximises
+       the silhouette score (Ward linkage ensures compact, convex clusters).
+    3. Compute originality as the normalised Euclidean distance from each
+       point's cluster centroid.
+
+    Args:
+        min_clusters: Minimum number of clusters to consider.
+        max_clusters: Maximum number of clusters to consider.
+    """
+
+    _UMAP_NEIGHBORS: int = 15
+    _UMAP_COMPONENTS: int = 5
+    _RANDOM_STATE: int = 42
+    _FALLBACK_THRESHOLD: int = 4  # points below this → skip clustering
+
+    def __init__(self, min_clusters: int = 5, max_clusters: int = 10) -> None:
+        self._min_clusters = min_clusters
+        self._max_clusters = max_clusters
+
+    def analyze(self, embeddings: list[list[float]]) -> ClusteringResult:
+        X = np.array(embeddings, dtype="float32")
+        n = len(X)
+
+        if n < self._FALLBACK_THRESHOLD:
+            logger.debug(
+                "ConstrainedClusteringAnalyzer: only %d points – skipping", n
+            )
+            return ClusteringResult(
+                labels=np.arange(n, dtype=int),
+                originalities=np.ones(n, dtype="float32"),
+            )
+
+        logger.debug(
+            "ConstrainedClusteringAnalyzer: reducing %d embeddings with UMAP", n
+        )
+        n_neighbors = max(2, min(self._UMAP_NEIGHBORS, n - 1))
+        n_components = max(1, min(self._UMAP_COMPONENTS, n - 2))
+        reduced = umap.UMAP(
+            n_neighbors=n_neighbors,
+            n_components=n_components,
+            metric="cosine",
+            low_memory=True,
+            random_state=self._RANDOM_STATE,
+        ).fit_transform(X)
+
+        k_min = max(2, min(self._min_clusters, n // 2))
+        k_max = max(k_min, min(self._max_clusters, n - 1))
+
+        labels = self._best_k_labels(reduced, k_min, k_max)
+        originalities = self._centroid_originalities(reduced, labels)
+
+        n_clusters = len(np.unique(labels))
+        logger.debug("ConstrainedClusteringAnalyzer: %d clusters", n_clusters)
+
+        return ClusteringResult(labels=labels, originalities=originalities)
+
+    def _best_k_labels(self, X: np.ndarray, k_min: int, k_max: int) -> np.ndarray:
+        """Pick k in [k_min, k_max] that maximises the silhouette score."""
+        best_score = -2.0
+        best_labels: np.ndarray = np.zeros(len(X), dtype=int)
+
+        for k in range(k_min, k_max + 1):
+            lbls = AgglomerativeClustering(n_clusters=k, linkage="ward").fit_predict(X)
+            if len(np.unique(lbls)) < 2:
+                continue
+            score = float(silhouette_score(X, lbls))
+            if score > best_score:
+                best_score = score
+                best_labels = lbls
+
+        return best_labels.astype(int)
+
+    def _centroid_originalities(
+        self, X: np.ndarray, labels: np.ndarray
+    ) -> np.ndarray:
+        """Originality = distance from cluster centroid, normalised to [0, 1]."""
+        dists = np.zeros(len(X), dtype="float32")
+        for label in np.unique(labels):
+            mask = labels == label
+            centroid = X[mask].mean(axis=0)
+            dists[mask] = np.linalg.norm(X[mask] - centroid, axis=1).astype("float32")
+
+        if dists.max() == 0:
+            return dists
+        return MinMaxScaler().fit_transform(dists.reshape(-1, 1)).flatten().astype("float32")
 
 
 # ---------------------------------------------------------------------------
@@ -310,32 +377,36 @@ class TitleGenerator:
 
 
 # ---------------------------------------------------------------------------
-# TocTreeBuilder – Single Responsibility: recursive tree assembly
+# TocTreeBuilder – Two-level flat builder (sections → chapters → ideas)
 # ---------------------------------------------------------------------------
 
 class TocTreeBuilder:
     """
-    Recursively build a hierarchical TocEntry tree from a flat list of ideas.
+    Build a two-level TOC tree: sections (level 1) → chapters (level 2) → ideas.
 
-    At each recursion level EmbeddingAnalyzer is called on the current subset
-    of embeddings, so labels and originalities are always consistent within
-    each sub-tree.
+    The first analyzer clusters all ideas into sections (target 5-10).
+    The chapter analyzer sub-clusters large sections into chapters (target 2-4).
+    This structure mirrors a book table of contents:
+    - ~5-10 main sections
+    - A few chapters per section (for sections large enough to warrant them)
+    - Ideas as leaf nodes; only genuinely outlying ideas become isolated leaves
 
-    Recursion stops when:
-    - The subset is too small (<= _MIN_LEAF_SIZE), OR
-    - The maximum depth has been reached, OR
-    - HDBSCAN produced only one real cluster (no meaningful split).
+    The optional chapter_analyzer defaults to the section analyzer when omitted,
+    preserving backward compatibility with injected test doubles.
     """
 
     _MIN_LEAF_SIZE: int = 3
-    _DEFAULT_MAX_DEPTH: int = 3
+    _CHAPTER_THRESHOLD: int = 5   # sections with > this many ideas get chapters
+    _DEFAULT_MAX_DEPTH: int = 2
 
     def __init__(
         self,
-        analyzer: EmbeddingAnalyzer,
+        analyzer: Any,
         title_generator: TitleGenerator,
+        chapter_analyzer: Any = None,
     ) -> None:
         self._analyzer = analyzer
+        self._chapter_analyzer = chapter_analyzer if chapter_analyzer is not None else analyzer
         self._titler = title_generator
 
     # ------------------------------------------------------------------
@@ -352,48 +423,31 @@ class TocTreeBuilder:
 
         Args:
             data:      Ideas to organise (documents, ids, embeddings).
-            max_depth: Maximum nesting depth of the output tree.
+            max_depth: Maximum nesting depth (1 = sections only, 2 = sections+chapters).
 
         Returns:
             Top-level list of TocEntry nodes.
         """
-        return self._recurse(
-            docs=data.documents,
-            ids=data.ids,
-            embeddings=data.embeddings,
-            level=1,
-            max_depth=max_depth,
-        )
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
-    def _recurse(
-        self,
-        docs: list[str],
-        ids: list[str],
-        embeddings: list[list[float]],
-        level: int,
-        max_depth: int,
-    ) -> list[TocEntry]:
+        docs = data.documents
+        ids = data.ids
+        embeddings = data.embeddings
         n = len(docs)
 
-        # Base case: too few ideas or depth limit reached → emit leaf nodes.
-        if n <= self._MIN_LEAF_SIZE or level > max_depth:
+        # Base case: too few ideas → emit leaves directly.
+        if n <= self._MIN_LEAF_SIZE:
             result = self._analyzer.analyze(embeddings)
             return self._make_leaves(docs, ids, result.originalities)
 
         result = self._analyzer.analyze(embeddings)
         real_clusters = np.unique(result.labels[result.labels != -1])
 
-        # Single cluster or all noise → no split is useful, emit leaves.
+        # Single cluster or all noise → no useful split.
         if len(real_clusters) <= 1:
             return self._make_leaves(docs, ids, result.originalities)
 
         entries: list[TocEntry] = []
 
-        # Noise points (label == -1) are truly isolated ideas → direct leaves.
+        # Noise points (label == -1) are genuinely isolated ideas → direct leaves.
         noise_idx = np.where(result.labels == -1)[0]
         for i in noise_idx:
             entries.append(TocEntry(
@@ -404,24 +458,75 @@ class TocTreeBuilder:
                 originality=self._fmt_pct(float(result.originalities[i])),
             ))
 
-        # Recurse into each real cluster.
+        # Build section headings.
         for label in real_clusters:
             idx = np.where(result.labels == label)[0]
-            sub_docs = [docs[i] for i in idx]
-            sub_ids = [ids[i] for i in idx]
-            sub_emb = [embeddings[i] for i in idx]
-            sub_orig = result.originalities[idx]
+            sec_docs = [docs[i] for i in idx]
+            sec_ids = [ids[i] for i in idx]
+            sec_emb = [embeddings[i] for i in idx]
+            sec_orig = result.originalities[idx]
 
-            children = self._recurse(sub_docs, sub_ids, sub_emb, level + 1, max_depth)
+            if max_depth >= 2 and len(sec_ids) > self._CHAPTER_THRESHOLD:
+                children = self._build_chapters(sec_docs, sec_ids, sec_emb)
+            else:
+                children = self._make_leaves(sec_docs, sec_ids, sec_orig)
+
             entries.append(TocEntry(
-                title=self._titler.generate(sub_docs),
+                title=self._titler.generate(sec_docs),
                 type="heading",
-                level=level,
-                originality=self._fmt_pct(float(sub_orig.mean())),
+                level=1,
+                originality=self._fmt_pct(float(sec_orig.mean())),
                 children=children,
             ))
 
         return entries
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _build_chapters(
+        self,
+        docs: list[str],
+        ids: list[str],
+        embeddings: list[list[float]],
+    ) -> list[TocEntry]:
+        """Sub-cluster a section into chapter headings (level 2)."""
+        result = self._chapter_analyzer.analyze(embeddings)
+        real_clusters = np.unique(result.labels[result.labels != -1])
+
+        # Only one cluster → return ideas directly (no chapter headings needed).
+        if len(real_clusters) <= 1:
+            return self._make_leaves(docs, ids, result.originalities)
+
+        chapters: list[TocEntry] = []
+
+        # Noise points within this section → isolated leaves under section.
+        noise_idx = np.where(result.labels == -1)[0]
+        for i in noise_idx:
+            chapters.append(TocEntry(
+                title=ids[i],
+                text=unformat_text(ids[i], docs[i], []),
+                type="idea",
+                id=ids[i],
+                originality=self._fmt_pct(float(result.originalities[i])),
+            ))
+
+        for label in real_clusters:
+            idx = np.where(result.labels == label)[0]
+            ch_docs = [docs[i] for i in idx]
+            ch_ids = [ids[i] for i in idx]
+            ch_orig = result.originalities[idx]
+
+            chapters.append(TocEntry(
+                title=self._titler.generate(ch_docs),
+                type="heading",
+                level=2,
+                originality=self._fmt_pct(float(ch_orig.mean())),
+                children=self._make_leaves(ch_docs, ch_ids, ch_orig),
+            ))
+
+        return chapters
 
     @staticmethod
     def _make_leaves(
@@ -456,25 +561,41 @@ class DataSimilarity:
     All collaborators are injected via __init__, making every component
     independently testable and replaceable (Open/Closed + Dependency Inversion).
 
-    Default wiring uses the concrete implementations; pass custom objects in tests.
+    Default wiring uses ConstrainedClusteringAnalyzer (two separate instances for
+    sections and chapters) which produces structured, book-like TOC hierarchies
+    with 5-10 sections and 2-4 chapters each.
     """
 
     def __init__(
         self,
         repository: IdeaRepository | None = None,
         cache: TocCachePort | None = None,
-        analyzer: EmbeddingAnalyzer | None = None,
+        analyzer: Any = None,
         title_generator: TitleGenerator | None = None,
         tree_builder: TocTreeBuilder | None = None,
     ) -> None:
-        _analyzer = analyzer or EmbeddingAnalyzer()
         _titler = title_generator or TitleGenerator()
+
+        if tree_builder is not None:
+            _tree_builder = tree_builder
+        elif analyzer is not None:
+            # Caller supplied a custom analyzer → use it for both levels.
+            _tree_builder = TocTreeBuilder(analyzer, _titler)
+        else:
+            # Default: constrained analyzers tuned for sections and chapters.
+            _section_analyzer = ConstrainedClusteringAnalyzer(
+                min_clusters=5, max_clusters=10
+            )
+            _chapter_analyzer = ConstrainedClusteringAnalyzer(
+                min_clusters=2, max_clusters=4
+            )
+            _tree_builder = TocTreeBuilder(
+                _section_analyzer, _titler, chapter_analyzer=_chapter_analyzer
+            )
 
         self._repo: IdeaRepository = repository or ChromaClient()
         self._cache: TocCachePort = cache or FileTocCache()
-        self._tree_builder: TocTreeBuilder = (
-            tree_builder or TocTreeBuilder(_analyzer, _titler)
-        )
+        self._tree_builder: TocTreeBuilder = _tree_builder
 
     # ------------------------------------------------------------------
     # Public API
