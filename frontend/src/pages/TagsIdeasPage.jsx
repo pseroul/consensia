@@ -281,32 +281,30 @@ const TagsIdeasPage = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const tagsResponse = await getTags();
+      const tagsResponse = await getTags(selectedBook?.id ?? null);
       const tagsData = tagsResponse.data;
 
       const tagsWithIdeas = await Promise.all(
         tagsData.map(async (tag) => {
-          const ideasResponse = await getIdeasFromTags(tag.name);
+          const ideasResponse = await getIdeasFromTags(tag.name, selectedBook?.id ?? null);
           const ideasData = ideasResponse.data;
           return {
             name: tag.name,
-            ideas: ideasData
-              .filter((idea) => !selectedBook || idea.book_id === selectedBook.id)
-              .map(idea => ({
-                id: idea.id,
-                name: idea.title || 'Untitled Idea',
-                description: idea.content || '',
-              })),
+            ideas: ideasData.map(idea => ({
+              id: idea.id,
+              name: idea.title || 'Untitled Idea',
+              description: idea.content || '',
+            })),
           };
         })
       );
 
       setTags(tagsWithIdeas);
       
-      // Fetch all ideas to find untagged ones
-      const allIdeasResponse = await getIdeas();
+      // Fetch ideas (filtered by book if selected) to find untagged ones
+      const allIdeasResponse = await getIdeas(selectedBook?.id ?? null);
       const allIdeasData = allIdeasResponse.data;
-      
+
       // Find ideas that don't belong to any tag
       const taggedIdeaIds = new Set();
       tagsWithIdeas.forEach(tag => {
@@ -314,10 +312,9 @@ const TagsIdeasPage = () => {
           if (idea.id) taggedIdeaIds.add(idea.id);
         });
       });
-      
+
       const untagged = allIdeasData
         .filter(idea => !taggedIdeaIds.has(idea.id))
-        .filter(idea => !selectedBook || idea.book_id === selectedBook.id)
         .map(idea => ({
         id: idea.id,
         name: idea.title || 'Untitled Idea',

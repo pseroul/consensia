@@ -84,15 +84,16 @@ def init_database() -> None:
     conn.close()
 
 # GET IDEA OR TAGS
-def get_idea_from_tags(tags: str) -> list[dict[Hashable, str]]:
+def get_idea_from_tags(tags: str, book_id: int | None = None) -> list[dict[Hashable, str]]:
     """
     Retrieve ideas associated with specific tags.
-    
+
     Fetches ideas that are linked to the specified tags from the database.
-    
+
     Args:
         tags (str): Semicolon-separated string of tag names
-        
+        book_id (int | None): Optional book ID to filter ideas by book
+
     Returns:
         list[dict[Hashable, str]]: List of dictionaries containing ideas
     """
@@ -102,45 +103,73 @@ def get_idea_from_tags(tags: str) -> list[dict[Hashable, str]]:
         tags_list = tags.split(";")
         placeholders = ", ".join(["?"] * len(tags_list))
         conn = sqlite3.connect(os.getenv('NAME_DB'))
-        query = f"""
-        SELECT DISTINCT i.id, i.title, i.content, i.book_id
-        FROM ideas i
-        JOIN relations r ON i.id = r.idea_id
-        JOIN tags t ON r.tag_name = t.name
-        WHERE t.name IN ({placeholders});
-        """
-        df = pd.read_sql_query(query, conn, params=tags_list)
+        if book_id is not None:
+            query = f"""
+            SELECT DISTINCT i.id, i.title, i.content, i.book_id
+            FROM ideas i
+            JOIN relations r ON i.id = r.idea_id
+            JOIN tags t ON r.tag_name = t.name
+            WHERE t.name IN ({placeholders}) AND i.book_id = ?;
+            """
+            params: list = tags_list + [book_id]
+        else:
+            query = f"""
+            SELECT DISTINCT i.id, i.title, i.content, i.book_id
+            FROM ideas i
+            JOIN relations r ON i.id = r.idea_id
+            JOIN tags t ON r.tag_name = t.name
+            WHERE t.name IN ({placeholders});
+            """
+            params = tags_list
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
     return df.to_dict("records")
 
-def get_ideas() -> list[dict[Hashable, Any]]:
+def get_ideas(book_id: int | None = None) -> list[dict[Hashable, Any]]:
     """
-    Retrieve all ideas from the database with limit to prevent memory issues.
-    
-    Gets all records from the ideas table in the SQLite database.
-    
+    Retrieve ideas from the database with limit to prevent memory issues.
+
     Args:
-        limit (int): Maximum number of records to return
-        
+        book_id (int | None): Optional book ID to filter ideas by book
+
     Returns:
-        list[dict[Hashable, Any]]: List of dictionaries containing all ideas
+        list[dict[Hashable, Any]]: List of dictionaries containing ideas
     """
     conn = sqlite3.connect(os.getenv('NAME_DB'))
-    query = """
-    SELECT
-        i.id,
-        i.title,
-        i.content,
-        i.book_id,
-        GROUP_CONCAT(r.tag_name, ';') AS tags
-    FROM
-        ideas i
-    LEFT JOIN
-        relations r ON i.id = r.idea_id
-    GROUP BY
-        i.id, i.title, i.content, i.book_id;
-    """
-    df = pd.read_sql_query(query, conn)
+    if book_id is not None:
+        query = """
+        SELECT
+            i.id,
+            i.title,
+            i.content,
+            i.book_id,
+            GROUP_CONCAT(r.tag_name, ';') AS tags
+        FROM
+            ideas i
+        LEFT JOIN
+            relations r ON i.id = r.idea_id
+        WHERE
+            i.book_id = ?
+        GROUP BY
+            i.id, i.title, i.content, i.book_id;
+        """
+        df = pd.read_sql_query(query, conn, params=[book_id])
+    else:
+        query = """
+        SELECT
+            i.id,
+            i.title,
+            i.content,
+            i.book_id,
+            GROUP_CONCAT(r.tag_name, ';') AS tags
+        FROM
+            ideas i
+        LEFT JOIN
+            relations r ON i.id = r.idea_id
+        GROUP BY
+            i.id, i.title, i.content, i.book_id;
+        """
+        df = pd.read_sql_query(query, conn)
     conn.close()
 
     # Handle potential NaN values in the dataframe
@@ -202,17 +231,29 @@ def get_content(idea_id: int) -> str:
     conn.close()
     return df['content'].iloc[0]
 
-def get_tags() -> list[dict[Hashable, Any]]:
+def get_tags(book_id: int | None = None) -> list[dict[Hashable, Any]]:
     """
-    Retrieve all tags from the database.
-    
-    Gets all records from the tags table in the SQLite database.
-    
+    Retrieve tags from the database.
+
+    Gets all records from the tags table, or only those used by ideas in a specific book.
+
+    Args:
+        book_id (int | None): Optional book ID to filter tags to those used in that book
+
     Returns:
-        list[dict[Hashable, Any]]: List of dictionaries containing all tags
+        list[dict[Hashable, Any]]: List of dictionaries containing tags
     """
     conn = sqlite3.connect(os.getenv('NAME_DB'))
-    df = pd.read_sql_query("SELECT * FROM tags", conn)
+    if book_id is not None:
+        query = """
+        SELECT DISTINCT t.name FROM tags t
+        JOIN relations r ON t.name = r.tag_name
+        JOIN ideas i ON r.idea_id = i.id
+        WHERE i.book_id = ?
+        """
+        df = pd.read_sql_query(query, conn, params=[book_id])
+    else:
+        df = pd.read_sql_query("SELECT * FROM tags", conn)
     conn.close()
     return df.to_dict("records")
 
