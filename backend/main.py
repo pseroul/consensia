@@ -934,8 +934,11 @@ def verify_otp(request: LoginRequest) -> dict[str, str]:
     """
     # Check the 6-digit code
     if verify_access(request.email, request.otp_code):
-        user = get_user_by_email(request.email)
-        is_admin = bool(user["is_admin"]) if user else False
+        try:
+            user = get_user_by_email(request.email)
+            is_admin = bool(user["is_admin"]) if user else False
+        except Exception:
+            is_admin = False
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": request.email, "is_admin": is_admin},
