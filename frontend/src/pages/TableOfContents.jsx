@@ -203,18 +203,23 @@ const filterTocByTitles = (items, allowedTitles) =>
 /**
  * Recursively convert a TOC tree to a markdown string.
  * Top-level items use `#`, their children `##`, etc.
+ * scoreMap and tagsMap enrich idea nodes with vote count and tags.
  */
-const tocToMarkdown = (items, depth = 1) => {
+const tocToMarkdown = (items, depth = 1, scoreMap = {}, tagsMap = {}) => {
   const prefix = '#'.repeat(depth);
   return items.reduce((md, item) => {
     if (item.type === 'heading') {
       md += `${prefix} ${item.title}\n\n`;
       if (item.children?.length) {
-        md += tocToMarkdown(item.children, depth + 1);
+        md += tocToMarkdown(item.children, depth + 1, scoreMap, tagsMap);
       }
     } else {
       md += `${prefix} ${item.title}\n\n`;
       if (item.text) md += `${item.text}\n\n`;
+      const tags = tagsMap[item.title];
+      if (tags) md += `**Tags:** ${tags}\n\n`;
+      const score = scoreMap[item.title] ?? 0;
+      md += `**Votes:** ${score > 0 ? `+${score}` : score}\n\n`;
     }
     return md;
   }, '');
@@ -233,16 +238,20 @@ const TableOfContents = () => {
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [bookIdeas, setBookIdeas] = useState(null);
   const [scoreMap, setScoreMap] = useState({});
+  const [tagsMap, setTagsMap] = useState({});
 
   // Fetch ideas to build score map and optionally filter TOC by selected book
   useEffect(() => {
     getIdeas()
       .then((res) => {
-        const map = {};
+        const scores = {};
+        const tags = {};
         res.data.forEach((idea) => {
-          map[idea.title] = idea.score ?? 0;
+          scores[idea.title] = idea.score ?? 0;
+          if (idea.tags) tags[idea.title] = idea.tags.replace(/;/g, ', ');
         });
-        setScoreMap(map);
+        setScoreMap(scores);
+        setTagsMap(tags);
         if (selectedBook) {
           const titles = new Set(
             res.data
@@ -257,6 +266,7 @@ const TableOfContents = () => {
       .catch(() => {
         setBookIdeas(null);
         setScoreMap({});
+        setTagsMap({});
       });
   }, [selectedBook]);
 
@@ -357,7 +367,7 @@ const TableOfContents = () => {
     const bookSlug = (selectedBook?.title || 'toc').replace(/\s+/g, '_');
     const filename = `${dateStr}_${bookSlug}.md`;
 
-    const markdown = tocToMarkdown(visibleToc);
+    const markdown = tocToMarkdown(visibleToc, 1, scoreMap, tagsMap);
     const blob = new Blob([markdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

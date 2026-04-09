@@ -82,8 +82,8 @@ const MOCK_TOC = [
 ];
 
 const MOCK_IDEAS = [
-  { id: 1, title: 'First Idea',  content: 'Content of first idea',  book_id: 1, score: 4 },
-  { id: 2, title: 'Second Idea', content: 'Content of second idea', book_id: 1, score: -2 },
+  { id: 1, title: 'First Idea',  content: 'Content of first idea',  book_id: 1, score: 4,  tags: 'ai;hardware' },
+  { id: 2, title: 'Second Idea', content: 'Content of second idea', book_id: 1, score: -2, tags: null },
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -475,6 +475,13 @@ describe('TableOfContents — markdown export', () => {
       expect(text).toContain('Chapter One');
       expect(text).toContain('First Idea');
       expect(text).toContain('Content of first idea');
+      // Tags: semicolons converted to ", "
+      expect(text).toContain('**Tags:** ai, hardware');
+      // Votes: positive score formatted with +
+      expect(text).toContain('**Votes:** +4');
+      // Second Idea has no tags, negative score
+      expect(text).toContain('**Votes:** -2');
+      expect(text).not.toContain('**Tags:** null');
     } finally {
       createObjectURLSpy.mockRestore();
       revokeObjectURLSpy.mockRestore();
