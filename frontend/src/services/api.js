@@ -69,6 +69,12 @@ export const getIdeaVotes = (id) => api.get(`/ideas/${id}/votes`);
 export const castVote = (id, value) => api.post(`/ideas/${id}/vote`, { value });
 export const removeVote = (id) => api.delete(`/ideas/${id}/vote`);
 
+// Impact comments
+export const getImpactComments = (ideaId) => api.get(`/ideas/${ideaId}/impact-comments`);
+export const getBookImpactComments = (bookId) => api.get(`/books/${bookId}/impact-comments`);
+export const createImpactComment = (ideaId, content) => api.post(`/ideas/${ideaId}/impact-comments`, { content });
+export const deleteImpactComment = (commentId) => api.delete(`/impact-comments/${commentId}`);
+
 // Admin user-management
 export const getAdminUsers = () => api.get('/admin/users');
 export const createAdminUser = (data) => api.post('/admin/users', data);

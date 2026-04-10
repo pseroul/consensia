@@ -51,13 +51,14 @@ vi.mock('../contexts/BookContext', () => ({
 
 // ─── Mock API ─────────────────────────────────────────────────────────────────
 vi.mock('../services/api', () => ({
-  getTocStructure:    vi.fn(),
-  updateTocStructure: vi.fn(),
-  getIdeas:           vi.fn(),
+  getTocStructure:        vi.fn(),
+  updateTocStructure:     vi.fn(),
+  getIdeas:               vi.fn(),
+  getBookImpactComments:  vi.fn(),
 }));
 
 import TableOfContents from './TableOfContents';
-import { getTocStructure, updateTocStructure, getIdeas } from '../services/api';
+import { getTocStructure, updateTocStructure, getIdeas, getBookImpactComments } from '../services/api';
 import { useBook } from '../contexts/BookContext';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────
@@ -380,6 +381,7 @@ describe('TableOfContents — markdown export', () => {
     useBook.mockImplementation(() => ({ selectedBook: null, books: [], setSelectedBook: vi.fn() }));
     getTocStructure.mockResolvedValue({ data: MOCK_TOC });
     getIdeas.mockResolvedValue({ data: MOCK_IDEAS });
+    getBookImpactComments.mockResolvedValue({ data: [] });
   });
 
   it('renders the "Export MD" button', async () => {
@@ -449,6 +451,12 @@ describe('TableOfContents — markdown export', () => {
     }
   });
 
+  it('does not call getBookImpactComments when no book is selected', async () => {
+    render(<TableOfContents />);
+    await waitFor(() => screen.getByText('Chapter One'));
+    expect(getBookImpactComments).not.toHaveBeenCalled();
+  });
+
   it('includes idea titles and content in the exported markdown', async () => {
     render(<TableOfContents />);
     await waitFor(() => screen.getByText('Chapter One'));
@@ -482,6 +490,49 @@ describe('TableOfContents — markdown export', () => {
       // Second Idea has no tags, negative score
       expect(text).toContain('**Votes:** -2');
       expect(text).not.toContain('**Tags:** null');
+    } finally {
+      createObjectURLSpy.mockRestore();
+      revokeObjectURLSpy.mockRestore();
+      createElementSpy.mockRestore();
+    }
+  });
+
+  it('includes impact comments in the exported markdown when a book is selected', async () => {
+    useBook.mockImplementation(() => ({
+      selectedBook: { id: 1, title: 'My Book' },
+      books: [],
+      setSelectedBook: vi.fn(),
+    }));
+    getBookImpactComments.mockResolvedValue({
+      data: [
+        { id: 1, idea_id: 1, idea_title: 'First Idea', username: 'alice', content: 'Big societal impact', created_at: '2026-01-01' },
+      ],
+    });
+
+    render(<TableOfContents />);
+    await waitFor(() => screen.getByText('Chapter One'));
+
+    let capturedBlob;
+    const origCreateElement = document.createElement.bind(document);
+    const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      capturedBlob = blob;
+      return 'blob:url';
+    });
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag) =>
+      tag === 'a' ? { href: '', download: '', click: vi.fn() } : origCreateElement(tag)
+    );
+
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /export as markdown/i }));
+
+      const text = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsText(capturedBlob);
+      });
+      expect(text).toContain('**Impacts:**');
+      expect(text).toContain('- alice : Big societal impact');
     } finally {
       createObjectURLSpy.mockRestore();
       revokeObjectURLSpy.mockRestore();

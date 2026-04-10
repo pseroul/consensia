@@ -19,6 +19,8 @@ from data_handler import (
     add_book, get_books, remove_book, add_book_author, remove_book_author, get_book_authors,
     get_users, cast_vote, remove_vote, get_idea_votes, get_user_vote,
     get_user_by_id, get_user_by_email, create_user, update_user, delete_user, count_admins,
+    is_book_author, get_idea_book_id, create_impact_comment, get_idea_impact_comments,
+    get_book_impact_comments, update_impact_comment, delete_impact_comment,
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -115,6 +117,15 @@ class VoteItem(BaseModel):
         value (int): 1 for upvote, -1 for downvote.
     """
     value: int
+
+
+class ImpactCommentItem(BaseModel):
+    """Data model for creating or updating an impact comment.
+
+    Attributes:
+        content (str): Text content of the impact comment.
+    """
+    content: str
 
 
 class LoginRequest(BaseModel):
@@ -867,6 +878,142 @@ async def delete_vote_for_idea(idea_id: int, current_user: dict = Depends(get_cu
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error removing vote: {str(e)}") from e
+
+
+# Impact comment endpoints
+
+@app.get("/ideas/{idea_id}/impact-comments", response_model=list)
+async def get_impact_comments_for_idea(idea_id: int, current_user: dict = Depends(get_current_user)) -> list:
+    """Get all impact comments for an idea.
+
+    Args:
+        idea_id (int): ID of the idea.
+        current_user (dict): Current authenticated user from JWT token.
+
+    Returns:
+        list: List of impact comment dicts.
+    """
+    try:
+        return get_idea_impact_comments(idea_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving impact comments: {str(e)}") from e
+
+
+@app.post("/ideas/{idea_id}/impact-comments", response_model=dict)
+async def create_impact_comment_for_idea(
+    idea_id: int, comment: ImpactCommentItem, current_user: dict = Depends(get_current_user)
+) -> dict:
+    """Create an impact comment on an idea.
+
+    Only users who are authors of the idea's book can comment.
+
+    Args:
+        idea_id (int): ID of the idea.
+        comment (ImpactCommentItem): Comment content.
+        current_user (dict): Current authenticated user from JWT token.
+
+    Returns:
+        dict: The created comment.
+
+    Raises:
+        HTTPException: 404 if idea not found, 403 if not a book author.
+    """
+    user_email = current_user.get("email")
+    try:
+        book_id = get_idea_book_id(idea_id)
+        if book_id is None:
+            raise HTTPException(status_code=404, detail="Idea not found")
+        if not is_book_author(book_id, user_email):
+            raise HTTPException(status_code=403, detail="Not a book author")
+        comment_id = create_impact_comment(idea_id, user_email, comment.content)
+        if comment_id is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        comments = get_idea_impact_comments(idea_id)
+        created = next((c for c in comments if c["id"] == comment_id), None)
+        return created
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating impact comment: {str(e)}") from e
+
+
+@app.put("/impact-comments/{comment_id}", response_model=dict)
+async def update_impact_comment_endpoint(
+    comment_id: int, comment: ImpactCommentItem, current_user: dict = Depends(get_current_user)
+) -> dict:
+    """Update an impact comment (owner only).
+
+    Args:
+        comment_id (int): ID of the comment to update.
+        comment (ImpactCommentItem): New comment content.
+        current_user (dict): Current authenticated user from JWT token.
+
+    Returns:
+        dict: Success message.
+
+    Raises:
+        HTTPException: 403 if the user does not own the comment.
+    """
+    user_email = current_user.get("email")
+    try:
+        success = update_impact_comment(comment_id, user_email, comment.content)
+        if not success:
+            raise HTTPException(status_code=403, detail="Comment not found or not the owner")
+        return {"detail": "Comment updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating impact comment: {str(e)}") from e
+
+
+@app.delete("/impact-comments/{comment_id}", response_model=dict)
+async def delete_impact_comment_endpoint(
+    comment_id: int, current_user: dict = Depends(get_current_user)
+) -> dict:
+    """Delete an impact comment.
+
+    Admins can delete any comment; regular users can only delete their own.
+
+    Args:
+        comment_id (int): ID of the comment to delete.
+        current_user (dict): Current authenticated user from JWT token.
+
+    Returns:
+        dict: Success message.
+
+    Raises:
+        HTTPException: 403 if not authorized to delete.
+    """
+    user_email = current_user.get("email")
+    is_admin = current_user.get("is_admin", False)
+    try:
+        success = delete_impact_comment(comment_id, user_email, is_admin)
+        if not success:
+            raise HTTPException(status_code=403, detail="Comment not found or not authorized")
+        return {"detail": "Comment deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting impact comment: {str(e)}") from e
+
+
+@app.get("/books/{book_id}/impact-comments", response_model=list)
+async def get_impact_comments_for_book(book_id: int, current_user: dict = Depends(get_current_user)) -> list:
+    """Get all impact comments for all ideas in a book.
+
+    Used by the TableOfContents page for the markdown export.
+
+    Args:
+        book_id (int): ID of the book.
+        current_user (dict): Current authenticated user from JWT token.
+
+    Returns:
+        list: List of comment dicts with idea_title included.
+    """
+    try:
+        return get_book_impact_comments(book_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving book impact comments: {str(e)}") from e
 
 
 # Health check endpoint

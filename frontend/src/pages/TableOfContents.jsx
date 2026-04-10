@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, BookOpen, ChevronRight, Download, Loader2, X, RotateCcw } from 'lucide-react';
-import { getTocStructure, updateTocStructure, getIdeas } from '../services/api';
+import { getTocStructure, updateTocStructure, getIdeas, getBookImpactComments } from '../services/api';
 import { useBook } from '../contexts/BookContext';
 
 /**
@@ -205,13 +205,13 @@ const filterTocByTitles = (items, allowedTitles) =>
  * Top-level items use `#`, their children `##`, etc.
  * scoreMap and tagsMap enrich idea nodes with vote count and tags.
  */
-const tocToMarkdown = (items, depth = 1, scoreMap = {}, tagsMap = {}) => {
+const tocToMarkdown = (items, depth = 1, scoreMap = {}, tagsMap = {}, commentsMap = {}) => {
   const prefix = '#'.repeat(depth);
   return items.reduce((md, item) => {
     if (item.type === 'heading') {
       md += `${prefix} ${item.title}\n\n`;
       if (item.children?.length) {
-        md += tocToMarkdown(item.children, depth + 1, scoreMap, tagsMap);
+        md += tocToMarkdown(item.children, depth + 1, scoreMap, tagsMap, commentsMap);
       }
     } else {
       md += `${prefix} ${item.title}\n\n`;
@@ -220,6 +220,14 @@ const tocToMarkdown = (items, depth = 1, scoreMap = {}, tagsMap = {}) => {
       if (tags) md += `**Tags:** ${tags}\n\n`;
       const score = scoreMap[item.title] ?? 0;
       md += `**Votes:** ${score > 0 ? `+${score}` : score}\n\n`;
+      const comments = commentsMap[item.title];
+      if (comments?.length) {
+        md += `**Impacts:**\n`;
+        comments.forEach((c) => {
+          md += `- ${c.username} : ${c.content}\n`;
+        });
+        md += '\n';
+      }
     }
     return md;
   }, '');
@@ -239,6 +247,7 @@ const TableOfContents = () => {
   const [bookIdeas, setBookIdeas] = useState(null);
   const [scoreMap, setScoreMap] = useState({});
   const [tagsMap, setTagsMap] = useState({});
+  const [commentsMap, setCommentsMap] = useState({});
 
   // Fetch ideas to build score map and optionally filter TOC by selected book
   useEffect(() => {
@@ -268,6 +277,21 @@ const TableOfContents = () => {
         setScoreMap({});
         setTagsMap({});
       });
+
+    if (selectedBook) {
+      getBookImpactComments(selectedBook.id)
+        .then((res) => {
+          const cm = {};
+          res.data.forEach((c) => {
+            if (!cm[c.idea_title]) cm[c.idea_title] = [];
+            cm[c.idea_title].push(c);
+          });
+          setCommentsMap(cm);
+        })
+        .catch(() => setCommentsMap({}));
+    } else {
+      setCommentsMap({});
+    }
   }, [selectedBook]);
 
   const visibleToc = bookIdeas ? filterTocByTitles(tocStructure, bookIdeas) : tocStructure;
@@ -367,7 +391,7 @@ const TableOfContents = () => {
     const bookSlug = (selectedBook?.title || 'toc').replace(/\s+/g, '_');
     const filename = `${dateStr}_${bookSlug}.md`;
 
-    const markdown = tocToMarkdown(visibleToc, 1, scoreMap, tagsMap);
+    const markdown = tocToMarkdown(visibleToc, 1, scoreMap, tagsMap, commentsMap);
     const blob = new Blob([markdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

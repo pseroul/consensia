@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Tag, Loader2 } from 'lucide-react'; // Vérifie bien que 'Tag' est ici
+import ImpactComments from './ImpactComments';
 
 const IdeaModal = ({ isOpen, onClose, onSave, initialData, bookId }) => {
   const [formData, setFormData] = useState({ title: '', content: '' });
@@ -155,6 +156,13 @@ const IdeaModal = ({ isOpen, onClose, onSave, initialData, bookId }) => {
             </button>
           </div>
         </form>
+
+        {initialData?.id && (
+          <div className="mt-6 border-t border-gray-100 pt-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">Impacts</h3>
+            <ImpactComments ideaId={initialData.id} />
+          </div>
+        )}
       </div>
     </div>
   );

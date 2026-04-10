@@ -1,6 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('./ImpactComments', () => ({ default: () => null }));
+
 import IdeaModal from './IdeaModal';
 
 describe('IdeaModal Component', () => {

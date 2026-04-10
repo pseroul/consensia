@@ -14,13 +14,14 @@ def init_database() -> None:
     """
     Initialize the SQLite database with required tables.
 
-    Creates six tables if they don't exist:
+    Creates seven tables if they don't exist:
     - users: stores user informations
     - tags: stores tag information
     - books: stores books that group ideas
     - ideas: stores ideas with contents, each belonging to a book
     - relations: manages many-to-many relationships between ideas and tags
     - book_authors: manages many-to-many relationships between books and users
+    - impact_comments: stores impact comments on ideas
 
     Returns:
         None
@@ -88,6 +89,18 @@ def init_database() -> None:
         value INTEGER NOT NULL CHECK (value IN (-1, 1)),
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE (idea_id, user_id),
+        FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS impact_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        idea_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -1057,6 +1070,223 @@ def get_user_vote(idea_id: int, user_email: str) -> int | None:
         )
         row = cursor.fetchone()
         return row[0] if row else None
+    finally:
+        conn.close()
+
+
+# IMPACT COMMENT FUNCTIONS
+
+def get_idea_book_id(idea_id: int) -> int | None:
+    """
+    Get the book_id of an idea.
+
+    Args:
+        idea_id (int): ID of the idea
+
+    Returns:
+        int | None: book_id if found, None otherwise
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT book_id FROM ideas WHERE id = ?", (idea_id,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def is_book_author(book_id: int, user_email: str) -> bool:
+    """
+    Check whether a user is an author of a given book.
+
+    Args:
+        book_id (int): ID of the book
+        user_email (str): Email of the user
+
+    Returns:
+        bool: True if the user is a book author, False otherwise
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT 1 FROM book_authors ba
+            JOIN users u ON ba.user_id = u.id
+            WHERE ba.book_id = ? AND u.email = ?
+            """,
+            (book_id, user_email),
+        )
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+
+def create_impact_comment(idea_id: int, user_email: str, content: str) -> int | None:
+    """
+    Create an impact comment on an idea.
+
+    Args:
+        idea_id (int): ID of the idea
+        user_email (str): Email of the commenting user
+        content (str): Text content of the comment
+
+    Returns:
+        int | None: ID of the new comment, or None if user not found
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM users WHERE email = ?", (user_email,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        user_id = row[0]
+        cursor.execute(
+            "INSERT INTO impact_comments (idea_id, user_id, content) VALUES (?, ?, ?)",
+            (idea_id, user_id, content),
+        )
+        conn.commit()
+        comment_id = cursor.lastrowid
+        logger.info(f"Impact comment created by '{user_email}' on idea '{idea_id}'.")
+        return comment_id
+    except sqlite3.Error as e:
+        logger.info(f"Error creating impact comment: {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def get_idea_impact_comments(idea_id: int) -> list[dict]:
+    """
+    Get all impact comments for an idea.
+
+    Args:
+        idea_id (int): ID of the idea
+
+    Returns:
+        list[dict]: List of comment dicts with keys: id, idea_id, user_id,
+                    username, user_email, content, created_at
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT ic.id, ic.idea_id, ic.user_id, u.username, u.email AS user_email,
+                   ic.content, ic.created_at
+            FROM impact_comments ic
+            JOIN users u ON ic.user_id = u.id
+            WHERE ic.idea_id = ?
+            ORDER BY ic.created_at ASC
+            """,
+            (idea_id,),
+        )
+        rows = cursor.fetchall()
+        cols = ["id", "idea_id", "user_id", "username", "user_email", "content", "created_at"]
+        return [dict(zip(cols, row, strict=True)) for row in rows]
+    finally:
+        conn.close()
+
+
+def get_book_impact_comments(book_id: int) -> list[dict]:
+    """
+    Get all impact comments for all ideas in a book.
+
+    Args:
+        book_id (int): ID of the book
+
+    Returns:
+        list[dict]: List of comment dicts with keys: id, idea_id, idea_title,
+                    username, content, created_at
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT ic.id, ic.idea_id, i.title AS idea_title, u.username,
+                   ic.content, ic.created_at
+            FROM impact_comments ic
+            JOIN ideas i ON ic.idea_id = i.id
+            JOIN users u ON ic.user_id = u.id
+            WHERE i.book_id = ?
+            ORDER BY i.id, ic.created_at ASC
+            """,
+            (book_id,),
+        )
+        rows = cursor.fetchall()
+        cols = ["id", "idea_id", "idea_title", "username", "content", "created_at"]
+        return [dict(zip(cols, row, strict=True)) for row in rows]
+    finally:
+        conn.close()
+
+
+def update_impact_comment(comment_id: int, user_email: str, content: str) -> bool:
+    """
+    Update an impact comment (owner only).
+
+    Args:
+        comment_id (int): ID of the comment to update
+        user_email (str): Email of the requesting user (must own the comment)
+        content (str): New text content
+
+    Returns:
+        bool: True if updated, False if not found or not the owner
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE impact_comments
+            SET content = ?
+            WHERE id = ? AND user_id = (SELECT id FROM users WHERE email = ?)
+            """,
+            (content, comment_id, user_email),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        logger.info(f"Error updating impact comment: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def delete_impact_comment(comment_id: int, user_email: str, is_admin: bool) -> bool:
+    """
+    Delete an impact comment.
+
+    Admins can delete any comment; regular users can only delete their own.
+
+    Args:
+        comment_id (int): ID of the comment to delete
+        user_email (str): Email of the requesting user
+        is_admin (bool): Whether the requesting user is an admin
+
+    Returns:
+        bool: True if deleted, False if not found or not authorized
+    """
+    conn = sqlite3.connect(os.getenv('NAME_DB'))
+    cursor = conn.cursor()
+    try:
+        if is_admin:
+            cursor.execute("DELETE FROM impact_comments WHERE id = ?", (comment_id,))
+        else:
+            cursor.execute(
+                """
+                DELETE FROM impact_comments
+                WHERE id = ? AND user_id = (SELECT id FROM users WHERE email = ?)
+                """,
+                (comment_id, user_email),
+            )
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        logger.info(f"Error deleting impact comment: {e}")
+        return False
     finally:
         conn.close()
 
