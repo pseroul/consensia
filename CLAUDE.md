@@ -79,7 +79,7 @@ Before submitting any change:
 
 ### Backend Key Modules
 - `main.py` — FastAPI app, all REST endpoints, dependency injection via `Depends()`
-- `data_handler.py` — All SQLite CRUD (ideas, tags, books, users, votes, relations); uses pandas for query results; all writes sync to ChromaDB
+- `data_handler.py` — All SQLite CRUD (ideas, tags, books, users, votes, relations, impact comments); uses pandas for query results; all idea writes sync to ChromaDB
 - `data_similarity.py` — Semantic pipeline: Sentence Transformers → UMAP → HDBSCAN clustering → TOC generation; caches to `data/toc.json`
 - `chroma_client.py` — ChromaDB wrapper for vector similarity search (model: `all-distilroberta-v1`)
 - `authenticator.py` — pyotp TOTP; to add a user: `python authenticator.py [email]`
@@ -87,14 +87,16 @@ Before submitting any change:
 - `utils.py` — `format_text(name, description, tags)` and `unformat_text()` for embedding text construction
 
 ### Database Schema (SQLite: `data/knowledge.db`)
-- `users(id, username, email, hashed_password)` — `hashed_password` stores the TOTP secret (not a hash)
+- `users(id, username, email, hashed_password, is_admin)` — `hashed_password` stores the TOTP secret (not a hash)
 - `books(id, title)` — grouping containers for ideas
 - `ideas(id, title, content, owner_id→users.id, book_id→books.id)` — `book_id` is required (NOT NULL)
 - `tags(name PK)`
 - `relations(idea_id, tag_name)` — composite PK, many-to-many between ideas and tags
 - `book_authors(book_id, user_id)` — composite PK, many-to-many between books and users
+- `idea_votes(id, idea_id, user_id, value, created_at)` — ON DELETE CASCADE; UNIQUE (idea_id, user_id)
+- `impact_comments(id, idea_id, user_id, content, created_at)` — ON DELETE CASCADE; multiple comments per user per idea allowed; creation restricted to book authors (HTTP 403 otherwise)
 
-**Important constraint:** No `ON DELETE CASCADE` is defined. Foreign key enforcement requires `PRAGMA foreign_keys = ON` per connection (not set by default). Deleting a parent row while children exist is a known quirk pinned by integration tests.
+**Cascade behaviour:** `idea_votes` and `impact_comments` use `ON DELETE CASCADE`. Other tables have no cascade — foreign key enforcement requires `PRAGMA foreign_keys = ON` per connection (not set by default), which is a known quirk pinned by integration tests.
 
 ### ChromaDB (vector store)
 - Collection path: `CHROMA_DB` env var (default: `backend/data/embeddings`)
@@ -108,7 +110,7 @@ Before submitting any change:
 - `src/contexts/AuthContext.jsx` — `useAuth()` hook; exposes `isAuthenticated`, `user`, `login()`, `logout()`
 - `src/contexts/BookContext.jsx` — `useBook()` hook; selected book state shared across pages
 - `src/pages/` — Login, Dashboard, TableOfContents, TagsIdeasPage, BooksPage, AdminPage
-- `src/components/` — Navbar, IdeaModal, VoteButtons, BookSelector
+- `src/components/` — Navbar, IdeaModal, VoteButtons, BookSelector, ImpactComments
 
 ### API Structure
 All non-auth endpoints require Bearer token. Key routes:
@@ -116,11 +118,16 @@ All non-auth endpoints require Bearer token. Key routes:
 - `GET/POST /ideas`, `PUT/DELETE /ideas/{id}` — idea CRUD; `book_id` required on POST
 - `GET /user/ideas` — ideas owned by current user
 - `GET /ideas/similar/{idea}` — semantic similarity via ChromaDB
-- `POST/DELETE /ideas/{id}/vote` — upvote / remove vote
+- `GET /ideas/{id}/votes`, `POST/DELETE /ideas/{id}/vote` — get votes / upvote / remove vote
+- `GET /ideas/{id}/impact-comments` — list impact comments for an idea
+- `POST /ideas/{id}/impact-comments` — create impact comment (403 if not book author)
+- `PUT /impact-comments/{id}` — update own comment (403 if not owner)
+- `DELETE /impact-comments/{id}` — delete own comment or any (admin); 403 otherwise
+- `GET /books/{id}/impact-comments` — all impact comments for a book (used by TOC export)
 - `GET /toc/structure`, `POST /toc/update` — hierarchical TOC (POST is expensive: triggers re-clustering)
 - `GET/POST/DELETE /tags`, `POST/DELETE /relations` — tag management
 - `GET/POST /books`, `DELETE /books/{id}` — book CRUD
-- `POST/DELETE /book-authors` — assign/remove book authorship
+- `GET /books/{id}/authors`, `POST/DELETE /book-authors` — book authorship management
 - `GET /users` — list all users (authenticated)
 - `GET /admin/users`, `POST /admin/users`, `PUT /admin/users/{id}`, `DELETE /admin/users/{id}` — admin-only user management
 
@@ -144,14 +151,15 @@ tests/
 ├── test_utils.py             # text format/unformat unit tests
 ├── test_admin.py             # admin endpoint unit tests
 └── integration/
-    ├── conftest.py           # fixtures: real SQLite, FakeChromaClient, JWT helpers
-    ├── test_auth.py          # OTP → JWT → protected endpoint chain
-    ├── test_idea_lifecycle.py# full CRUD: create/read/update/delete + Chroma sync
-    ├── test_tag_cascades.py  # tag management, relation operations
-    ├── test_multi_user.py    # per-user idea isolation
-    ├── test_toc_pipeline.py  # TOC cache load/generate/invalidate
-    ├── test_books.py         # book CRUD + author management
-    └── test_voting.py        # vote/unvote lifecycle
+    ├── conftest.py              # fixtures: real SQLite, FakeChromaClient, JWT helpers
+    ├── test_auth.py             # OTP → JWT → protected endpoint chain
+    ├── test_idea_lifecycle.py   # full CRUD: create/read/update/delete + Chroma sync
+    ├── test_tag_cascades.py     # tag management, relation operations
+    ├── test_multi_user.py       # per-user idea isolation
+    ├── test_toc_pipeline.py     # TOC cache load/generate/invalidate
+    ├── test_books.py            # book CRUD + author management
+    ├── test_voting.py           # vote/unvote lifecycle
+    └── test_impact_comments.py  # impact comment lifecycle and access control
 ```
 
 **Unit test pattern** — heavy ML deps (chromadb, sentence-transformers, umap, hdbscan) are mocked at `sys.modules` level at the top of each file. Exception: `test_data_similarity.py::TestEmbeddingAnalyzer` exercises the real UMAP → HDBSCAN pipeline — do not add sys.modules patches that affect it.
@@ -177,6 +185,8 @@ from tests.integration.conftest import create_db_user, make_token, auth_headers
 - `DELETE /tags/{name}` does NOT cascade relations
 - Non-existent user email on idea create → `{"id": -1}` (not 4xx)
 - Empty TOC list `[]` is falsy → re-generated every request (`if toc:` in main.py)
+- Non-book-author on `POST /ideas/{id}/impact-comments` → 403
+- Non-owner on `PUT/DELETE /impact-comments/{id}` → 403 (admin bypasses ownership check)
 
 Coverage threshold: **≥ 80%** (pyproject.toml). Full suite achieves ~97%. Running only a subset will report below threshold — expected.
 

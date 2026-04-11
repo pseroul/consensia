@@ -44,12 +44,19 @@ frontend/
 +-- src/
     +-- components/
     |   +-- Navbar.test.jsx
-    |   +-- IdeaModal.test.jsx
+    |   +-- IdeaModal.test.jsx     # also tests that Impact section renders in edit mode
+    |   +-- ImpactComments.test.jsx# list, add, delete, 403 error message
+    |   +-- VoteButtons.test.jsx
+    |   +-- BookSelector.test.jsx
+    +-- contexts/
+    |   +-- AuthContext.test.jsx
+    |   +-- BookContext.test.jsx
     +-- pages/
     |   +-- Login.test.jsx
-    |   +-- Dashboard.test.jsx
-    |   +-- TableOfContents.test.jsx
+    |   +-- TableOfContents.test.jsx # includes impact comments in markdown export
     |   +-- TagsIdeasPage.test.jsx
+    |   +-- BooksPage.test.jsx
+    |   +-- AdminPage.test.jsx
     +-- setupTests.js              # global mocks (React Router, axios, localStorage, icons)
 ```
 

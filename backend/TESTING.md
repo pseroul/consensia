@@ -40,6 +40,7 @@ backend/
 │   ├── test_data_similarity.py   # ML pipeline unit tests
 │   ├── test_authenticator.py     # TOTP + JWT unit tests
 │   ├── test_chroma_client.py     # ChromaDB wrapper unit tests
+│   ├── test_admin.py             # admin endpoint unit tests
 │   ├── test_utils.py             # text format/unformat unit tests
 │   └── integration/
 │       ├── __init__.py
@@ -48,7 +49,10 @@ backend/
 │       ├── test_idea_lifecycle.py# full CRUD: create/read/update/delete + Chroma sync
 │       ├── test_tag_cascades.py  # tag management, relation operations, filter by tag
 │       ├── test_multi_user.py    # per-user idea isolation
-│       └── test_toc_pipeline.py  # TOC cache load/generate/invalidate
+│       ├── test_toc_pipeline.py  # TOC cache load/generate/invalidate
+│       ├── test_books.py         # book CRUD + author management
+│       ├── test_voting.py        # vote/unvote lifecycle
+│       └── test_impact_comments.py # impact comment lifecycle and access control
 ```
 
 ---
@@ -154,6 +158,9 @@ intentionally changes the contract.
 | `DELETE /tags/{name}` does NOT cascade relations | `test_delete_tag_does_not_cascade_to_relations` | Same root cause |
 | Non-existent user email → `{"id": -1}` (not 4xx) | `test_create_idea_for_nonexistent_user_returns_200_but_id_is_negative` | `add_idea` returns -1 on owner-not-found |
 | Empty TOC list `[]` is falsy → re-generated every request | `test_toc_cache_is_not_used_when_content_is_empty_list` | `if toc:` in main.py |
+| Non-book-author → HTTP 403 on POST impact comment | `test_non_book_author_gets_403` | Checked via `is_book_author()` before insert |
+| Non-owner → HTTP 403 on PUT/DELETE impact comment | `test_non_owner_gets_403` / `test_non_owner_non_admin_gets_403` | `UPDATE/DELETE … WHERE user_id = ?` returns rowcount 0 |
+| Admin can DELETE any impact comment | `test_admin_can_delete_any` | `is_admin` read from JWT payload, not from DB at request time |
 
 ---
 

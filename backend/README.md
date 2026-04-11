@@ -8,6 +8,8 @@ A FastAPI backend that provides REST endpoints for managing ideas and tags with 
 - Tag-based filtering and searching
 - Relationship management between data and tags
 - Semantic similarity support (via ChromaClient)
+- Upvote / downvote on ideas
+- Impact comments on ideas (book authors only)
 - Health check endpoint
 
 ## Setup
@@ -60,9 +62,16 @@ where localhost are used for direct access (aka for debuging) and your site is t
 
 The application uses SQLite with the database file located at `data/knowledge.db`. The database schema includes:
 
-- `tags` table: stores tag information
-- `ideas` table: stores idea items with descriptions
-- `relation` table: manages many-to-many relationships between ideas and tags
+- `users` table: registered users with TOTP secrets
+- `tags` table: flat list of labels
+- `books` table: groups of ideas, each with a list of authors
+- `ideas` table: core content, each belonging to a book
+- `relations` table: many-to-many between ideas and tags
+- `book_authors` table: many-to-many between books and users
+- `idea_votes` table: upvotes/downvotes on ideas
+- `impact_comments` table: free-text comments on ideas, restricted to book authors
+
+See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for the full schema with column details and ER diagram.
 
 
 ## Toolset
