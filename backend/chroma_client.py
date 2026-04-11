@@ -25,7 +25,7 @@ class ChromaClient:
                 Defaults to "Ideas".
         """
 
-        self.model_name = "all-distilroberta-v1"
+        self.model_name = "all-MiniLM-L6-v2"
 
         self.client = chromadb.PersistentClient(path=os.getenv('CHROMA_DB'))
         self.emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=self.model_name)

@@ -158,3 +158,13 @@ class TestTocStructuralInvariants:
             assert "type" in entry
             assert "originality" in entry
             assert entry["type"] in ("idea", "heading")
+
+
+@pytest.mark.integration
+class TestTocLlmFallback:
+    def test_toc_works_without_llm_api_key(self, client, alice, monkeypatch):
+        """TOC generation succeeds when no LLM API key is configured (TF-IDF fallback)."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        response = client.post("/toc/update", headers=alice["headers"])
+        assert response.status_code == 200
+        assert response.json() == {"message": "toc added successfully"}

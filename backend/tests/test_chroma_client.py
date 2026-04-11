@@ -26,7 +26,7 @@ class TestChromaClient:
         assert hasattr(self.chroma_client, 'client')
         assert hasattr(self.chroma_client, 'emb_fn')
         assert hasattr(self.chroma_client, 'collection')
-        assert self.chroma_client.model_name == "all-distilroberta-v1"
+        assert self.chroma_client.model_name == "all-MiniLM-L6-v2"
     
     def test_insert_idea(self):
         """Test insert_idea method"""

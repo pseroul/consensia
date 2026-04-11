@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Consensia is a full-stack idea management app with semantic clustering. Backend: FastAPI + SQLite + ChromaDB. Frontend: React + Vite + Tailwind. Authentication: Google Authenticator (TOTP) + JWT. Deployed on Raspberry Pi with nginx + Gunicorn.
+Consensia is a full-stack idea management app with semantic clustering. Backend: FastAPI + SQLite + ChromaDB + LLM-assisted TOC generation. Frontend: React + Vite + Tailwind. Authentication: Google Authenticator (TOTP) + JWT. Deployed on Raspberry Pi with nginx + Gunicorn.
 
 ## Commands
 
@@ -87,10 +87,11 @@ Before submitting any change:
 ### Backend Key Modules
 - `main.py` — FastAPI app, all REST endpoints, dependency injection via `Depends()`
 - `data_handler.py` — All SQLite CRUD (ideas, tags, books, users, votes, relations, impact comments); uses pandas for query results; all idea writes sync to ChromaDB
-- `data_similarity.py` — Semantic pipeline: Sentence Transformers → UMAP → HDBSCAN clustering → TOC generation; caches to `data/toc.json`
-- `chroma_client.py` — ChromaDB wrapper for vector similarity search (model: `all-distilroberta-v1`)
+- `data_similarity.py` — Semantic pipeline: UMAP → AgglomerativeClustering → LLM title generation → narrative ordering → TOC generation; caches to `data/toc.json`
+- `llm_client.py` — LLM abstraction (`LlmPort` Protocol) with 3 backends: `ClaudeLlmClient` (Anthropic API), `OllamaLlmClient` (local), `TfidfFallbackClient`; factory `create_llm_client()` auto-selects the best available backend
+- `chroma_client.py` — ChromaDB wrapper for vector similarity search (model: `all-MiniLM-L6-v2`)
 - `authenticator.py` — pyotp TOTP; to add a user: `python authenticator.py [email]`
-- `config.py` — All paths from environment (`CHROMA_DB`, `NAME_DB`, `TOC_CACHE_PATH`, `ALLOWED_ORIGINS`)
+- `config.py` — All paths from environment (`CHROMA_DB`, `NAME_DB`, `TOC_CACHE_PATH`, `ALLOWED_ORIGINS`, `ANTHROPIC_API_KEY`, `LLM_MODEL`, `OLLAMA_URL`, `OLLAMA_MODEL`)
 - `utils.py` — `format_text(name, description, tags)` and `unformat_text()` for embedding text construction
 
 ### Database Schema (SQLite: `data/knowledge.db`)
@@ -107,7 +108,7 @@ Before submitting any change:
 
 ### ChromaDB (vector store)
 - Collection path: `CHROMA_DB` env var (default: `backend/data/embeddings`)
-- Model: `all-distilroberta-v1`
+- Model: `all-MiniLM-L6-v2`
 - Document key: idea `title`
 - Every SQLite idea write (insert/update/delete) has a corresponding ChromaDB write in `data_handler.py`
 
@@ -156,6 +157,7 @@ tests/
 ├── test_data_similarity.py   # ML pipeline unit tests
 ├── test_authenticator.py     # TOTP + JWT unit tests
 ├── test_chroma_client.py     # ChromaDB wrapper unit tests
+├── test_llm_client.py        # LLM client unit tests (Claude, Ollama, TF-IDF fallback)
 ├── test_utils.py             # text format/unformat unit tests
 ├── test_admin.py             # admin endpoint unit tests
 └── integration/
@@ -235,6 +237,10 @@ Both layers enforce **≥ 80%** coverage (vitest.config.ts). E2E tests do not co
 | `TOC_CACHE_PATH` | `backend/data/toc.json` | TOC cache file path |
 | `ALLOWED_ORIGINS` | loaded from `backend/data/site.json` | CORS allowed origins |
 | `JWT_SECRET_KEY` | — | Required for token signing |
+| `ANTHROPIC_API_KEY` | (empty) | Anthropic API key for LLM-powered TOC titles and ordering |
+| `LLM_MODEL` | `claude-haiku-4-5-20251001` | Claude model for TOC generation |
+| `OLLAMA_URL` | `http://localhost:11434` | Local Ollama server URL (fallback LLM) |
+| `OLLAMA_MODEL` | `phi3:mini` | Ollama model for TOC generation |
 | `VITE_API_URL` | `http://localhost:8000` | Backend URL for frontend API calls |
 
 ## Deployment Notes

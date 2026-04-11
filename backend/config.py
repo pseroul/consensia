@@ -14,6 +14,12 @@ def set_env_var() -> None:
         os.environ.setdefault('CHROMA_DB', os.path.join(os.path.dirname(__file__), "data", "embeddings"))
         os.environ.setdefault('NAME_DB', os.path.join(os.path.dirname(__file__), "data", "knowledge.db"))
         os.environ.setdefault('TOC_CACHE_PATH', os.path.join(os.path.dirname(__file__), "data", "toc.json"))
+
+        # LLM configuration for TOC title generation and section ordering
+        os.environ.setdefault('ANTHROPIC_API_KEY', '')
+        os.environ.setdefault('LLM_MODEL', 'claude-haiku-4-5-20251001')
+        os.environ.setdefault('OLLAMA_URL', 'http://localhost:11434')
+        os.environ.setdefault('OLLAMA_MODEL', 'phi3:mini')
         
         # Load origins from site.json
         site_json_path = os.path.join(os.path.dirname(__file__), "data", "site.json")

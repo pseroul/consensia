@@ -15,7 +15,9 @@ from backend.data_similarity import (
     TitleGenerator,
     TocTreeBuilder,
     DataSimilarity,
+    SectionOrderer,
 )
+from backend.llm_client import LlmUnavailableError
 
 
 # ---------------------------------------------------------------------------
@@ -416,3 +418,199 @@ class TestDataSimilarity:
                 check_keys(node.get("children", []))
 
         check_keys(result)
+
+
+# ---------------------------------------------------------------------------
+# FakeLlm – test double for LlmPort
+# ---------------------------------------------------------------------------
+
+class FakeLlm:
+    """LlmPort stub that returns deterministic titles and ordering."""
+
+    def __init__(self, titles: list[str] | None = None, order: list[int] | None = None):
+        self._titles = titles
+        self._order = order
+        self.generate_calls: list = []
+        self.order_calls: list = []
+
+    def generate_titles(self, sections):
+        self.generate_calls.append(sections)
+        if self._titles is not None:
+            return self._titles[: len(sections)]
+        return [f"LLM Title {i}" for i in range(len(sections))]
+
+    def order_sections(self, summaries):
+        self.order_calls.append(summaries)
+        if self._order is not None:
+            return self._order
+        return list(reversed(range(len(summaries))))
+
+
+class FailingLlm:
+    """LlmPort stub that always raises LlmUnavailableError."""
+
+    def generate_titles(self, sections):
+        raise LlmUnavailableError("test failure")
+
+    def order_sections(self, summaries):
+        raise LlmUnavailableError("test failure")
+
+
+# ---------------------------------------------------------------------------
+# SectionOrderer
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestSectionOrderer:
+    def test_no_llm_returns_original_order(self):
+        orderer = SectionOrderer(llm=None)
+        entries = [
+            TocEntry(title="A", type="heading", originality="50%", level=1),
+            TocEntry(title="B", type="heading", originality="50%", level=1),
+            TocEntry(title="C", type="heading", originality="50%", level=1),
+        ]
+        result = orderer.order(entries)
+        assert [e.title for e in result] == ["A", "B", "C"]
+
+    def test_llm_reorders_sections(self):
+        llm = FakeLlm(order=[2, 0, 1])
+        orderer = SectionOrderer(llm=llm)
+        entries = [
+            TocEntry(title="A", type="heading", originality="50%", level=1),
+            TocEntry(title="B", type="heading", originality="50%", level=1),
+            TocEntry(title="C", type="heading", originality="50%", level=1),
+        ]
+        result = orderer.order(entries)
+        assert [e.title for e in result] == ["C", "A", "B"]
+
+    def test_single_section_skips_llm(self):
+        llm = FakeLlm()
+        orderer = SectionOrderer(llm=llm)
+        entries = [
+            TocEntry(title="A", type="heading", originality="50%", level=1),
+        ]
+        result = orderer.order(entries)
+        assert len(llm.order_calls) == 0
+        assert [e.title for e in result] == ["A"]
+
+    def test_llm_failure_returns_original_order(self):
+        orderer = SectionOrderer(llm=FailingLlm())
+        entries = [
+            TocEntry(title="A", type="heading", originality="50%", level=1),
+            TocEntry(title="B", type="heading", originality="50%", level=1),
+            TocEntry(title="C", type="heading", originality="50%", level=1),
+        ]
+        result = orderer.order(entries)
+        assert [e.title for e in result] == ["A", "B", "C"]
+
+
+# ---------------------------------------------------------------------------
+# TocTreeBuilder with LLM
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestTocTreeBuilderWithLlm:
+    def test_llm_titles_used_when_available(self):
+        llm = FakeLlm(titles=["Chapter Alpha", "Chapter Beta"])
+        builder = TocTreeBuilder(FakeAnalyzer(), TitleGenerator(), llm=llm)
+        data = _make_idea_data(n=10)
+        entries = builder.build(data, max_depth=2)
+
+        headings = [e for e in entries if e.type == "heading"]
+        assert len(headings) == 2
+        assert headings[0].title == "Chapter Alpha"
+        assert headings[1].title == "Chapter Beta"
+
+    def test_tfidf_fallback_when_llm_fails(self):
+        builder = TocTreeBuilder(FakeAnalyzer(), TitleGenerator(), llm=FailingLlm())
+        data = _make_idea_data(n=10)
+        entries = builder.build(data, max_depth=2)
+
+        headings = [e for e in entries if e.type == "heading"]
+        assert len(headings) == 2
+        # TF-IDF fallback should produce non-empty titles
+        for h in headings:
+            assert len(h.title) > 0
+
+    def test_orderer_applied_after_build(self):
+        llm = FakeLlm(order=[1, 0])
+        orderer = SectionOrderer(llm=llm)
+        builder = TocTreeBuilder(FakeAnalyzer(), TitleGenerator(), orderer=orderer)
+        data = _make_idea_data(n=10)
+        entries = builder.build(data, max_depth=2)
+
+        headings = [e for e in entries if e.type == "heading"]
+        # FakeAnalyzer splits 10 items into 2 clusters (0..4 and 5..9),
+        # orderer reverses them.
+        assert len(headings) == 2
+        # The second cluster's heading should now be first
+        first_child_ids = {c.id for c in headings[0].children}
+        assert "id_5" in first_child_ids or "id_6" in first_child_ids
+
+    def test_all_ids_present_with_llm(self):
+        llm = FakeLlm()
+        orderer = SectionOrderer(llm=llm)
+        builder = TocTreeBuilder(FakeAnalyzer(), TitleGenerator(), llm=llm, orderer=orderer)
+        data = _make_idea_data(n=10)
+        entries = builder.build(data)
+
+        def collect_ids(nodes):
+            result = []
+            for node in nodes:
+                if node.id is not None:
+                    result.append(node.id)
+                result.extend(collect_ids(node.children))
+            return result
+
+        assert sorted(collect_ids(entries)) == sorted(data.ids)
+
+
+# ---------------------------------------------------------------------------
+# DataSimilarity with LLM
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestDataSimilarityWithLlm:
+    def _make_ds_with_llm(self, n: int = 10):
+        data = _make_idea_data(n)
+        cache = FakeCache()
+        repo = FakeRepository(data)
+        llm = FakeLlm()
+        ds = DataSimilarity(
+            repository=repo,
+            cache=cache,
+            analyzer=FakeAnalyzer(),
+            llm=llm,
+        )
+        return ds, cache, llm
+
+    def test_llm_wired_through_datasimilarity(self):
+        ds, cache, llm = self._make_ds_with_llm()
+        result = ds.generate_toc_structure()
+
+        assert isinstance(result, list)
+        # LLM should have been called for title generation
+        assert len(llm.generate_calls) > 0
+
+    def test_headings_use_llm_titles(self):
+        ds, _, llm = self._make_ds_with_llm()
+        result = ds.generate_toc_structure()
+
+        headings = [n for n in result if n.get("type") == "heading"]
+        for h in headings:
+            assert h["title"].startswith("LLM Title")
+
+    def test_no_llm_uses_tfidf(self):
+        data = _make_idea_data(10)
+        cache = FakeCache()
+        repo = FakeRepository(data)
+        ds = DataSimilarity(
+            repository=repo,
+            cache=cache,
+            analyzer=FakeAnalyzer(),
+            llm=None,
+        )
+        result = ds.generate_toc_structure()
+        headings = [n for n in result if n.get("type") == "heading"]
+        for h in headings:
+            assert not h["title"].startswith("LLM Title")

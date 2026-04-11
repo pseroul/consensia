@@ -7,6 +7,7 @@ from authenticator import verify_access
 from fastapi.middleware.cors import CORSMiddleware
 from config import set_env_var
 from data_similarity import DataSimilarity
+from llm_client import create_llm_client
 import logging
 import os
 from fastapi.security import OAuth2PasswordBearer
@@ -1056,9 +1057,10 @@ async def get_toc_structure(current_user: dict = Depends(get_current_user)) -> l
     """
     
     try:
-        data_similarity = DataSimilarity()
+        llm = create_llm_client()
+        data_similarity = DataSimilarity(llm=llm)
         toc = None
-        toc =  data_similarity.load_toc_structure()
+        toc = data_similarity.load_toc_structure()
         if toc is not None:
             return toc
         else:
@@ -1068,18 +1070,19 @@ async def get_toc_structure(current_user: dict = Depends(get_current_user)) -> l
 @app.post("/toc/update", response_model=dict)
 async def update_toc_structure(current_user: dict = Depends(get_current_user)) -> dict[str, str]:
     """Update the hierarchical table of contents structure
-    
+
     Args:
         current_user (dict): Current authenticated user from JWT token
-    
+
     Returns:
         list: Hierarchical table of contents structure generated from all data.
-    
+
     Raises:
         HTTPException: If there's an error updating the toc.
     """
     try:
-        data_similarity = DataSimilarity()
+        llm = create_llm_client()
+        data_similarity = DataSimilarity(llm=llm)
         data_similarity.generate_toc_structure()
         return {"message": "toc added successfully"}
     except Exception as e:

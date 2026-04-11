@@ -65,7 +65,8 @@ graph TB
     subgraph DataLayer["Data Layer"]
         DH["data_handler.py\nSQLite CRUD\npandas DataFrames\nChromaDB sync"]
         DS["data_similarity.py\nTOC generation\nClustering pipeline\nCaching"]
-        CC["chroma_client.py\nChromaDB wrapper\nEmbedding model"]
+        CC["chroma_client.py\nChromaDB wrapper\nEmbedding model\n(all-MiniLM-L6-v2)"]
+        LC["llm_client.py\nLLM abstraction\nClaude API / Ollama / TF-IDF\nTitle generation & ordering"]
     end
 
     subgraph Auth["Authentication"]
@@ -81,6 +82,7 @@ graph TB
     Routes --> Authn
     DH --> CC
     DS --> CC
+    DS --> LC
     FastAPI --> Cfg
 ```
 
@@ -294,6 +296,10 @@ sequenceDiagram
 | `CHROMA_DB` | `backend/data/embeddings` | No | ChromaDB persistent storage directory |
 | `TOC_CACHE_PATH` | `backend/data/toc.json` | No | TOC JSON cache file path |
 | `ALLOWED_ORIGINS` | loaded from `backend/data/site.json` | No | CORS allowed origins (set via `site.json`) |
+| `ANTHROPIC_API_KEY` | (empty) | No | Claude API key for LLM-powered TOC titles and ordering |
+| `LLM_MODEL` | `claude-haiku-4-5-20251001` | No | Claude model to use for TOC generation |
+| `OLLAMA_URL` | `http://localhost:11434` | No | Ollama server URL for local LLM fallback |
+| `OLLAMA_MODEL` | `phi3:mini` | No | Ollama model for local LLM fallback |
 | `VITE_API_URL` | `http://localhost:8000` | No (prod: yes) | Backend base URL — set at frontend build time |
 
 ---

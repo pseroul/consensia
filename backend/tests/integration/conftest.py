@@ -48,6 +48,8 @@ _bootstrap_tmp = _tempfile.mkdtemp(prefix="consensia_bootstrap_")
 os.environ.setdefault("NAME_DB", os.path.join(_bootstrap_tmp, "bootstrap.db"))
 os.environ.setdefault("CHROMA_DB", os.path.join(_bootstrap_tmp, "chroma"))
 os.environ.setdefault("TOC_CACHE_PATH", os.path.join(_bootstrap_tmp, "toc.json"))
+# Ensure integration tests never call a real LLM API
+os.environ.pop("ANTHROPIC_API_KEY", None)
 
 # ---------------------------------------------------------------------------
 # Now safe to import the app (no ML module mocking needed; the import chain
@@ -129,6 +131,13 @@ def patch_chroma(chroma_store: dict, monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("data_handler.ChromaClient", _make_fake)
     monkeypatch.setattr("data_similarity.ChromaClient", _make_fake)
+
+
+@pytest.fixture(autouse=True)
+def patch_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure integration tests use the TF-IDF fallback, never a real LLM."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr("llm_client._ollama_reachable", lambda _url: False)
 
 
 @pytest.fixture()

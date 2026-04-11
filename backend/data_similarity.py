@@ -4,7 +4,7 @@ import json
 import logging
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, TYPE_CHECKING
 
 import umap
 import hdbscan
@@ -15,6 +15,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 from chroma_client import ChromaClient
 from utils import unformat_text
+
+if TYPE_CHECKING:
+    from llm_client import LlmPort
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -377,6 +380,42 @@ class TitleGenerator:
 
 
 # ---------------------------------------------------------------------------
+# SectionOrderer – Logical narrative ordering via LLM
+# ---------------------------------------------------------------------------
+
+class SectionOrderer:
+    """Determine a logical narrative ordering for TOC sections.
+
+    When an LLM is available, it reorders sections to create a coherent
+    reading arc (foundations → applications → advanced → conclusion).
+    Without an LLM the original clustering order is preserved.
+    """
+
+    def __init__(self, llm: "LlmPort | None" = None) -> None:
+        self._llm = llm
+
+    def order(self, sections: list[TocEntry]) -> list[TocEntry]:
+        if self._llm is None or len(sections) < 2:
+            return sections
+
+        summaries = [
+            {
+                "title": s.title,
+                "num_ideas": len(s.children),
+                "idea_titles": [c.title for c in s.children[:5]],
+            }
+            for s in sections
+        ]
+
+        try:
+            indices = self._llm.order_sections(summaries)
+            return [sections[i] for i in indices]
+        except Exception:
+            logger.warning("SectionOrderer: LLM ordering failed, keeping original order")
+            return sections
+
+
+# ---------------------------------------------------------------------------
 # TocTreeBuilder – Two-level flat builder (sections → chapters → ideas)
 # ---------------------------------------------------------------------------
 
@@ -404,10 +443,14 @@ class TocTreeBuilder:
         analyzer: Any,
         title_generator: TitleGenerator,
         chapter_analyzer: Any = None,
+        llm: "LlmPort | None" = None,
+        orderer: SectionOrderer | None = None,
     ) -> None:
         self._analyzer = analyzer
         self._chapter_analyzer = chapter_analyzer if chapter_analyzer is not None else analyzer
         self._titler = title_generator
+        self._llm = llm
+        self._orderer = orderer
 
     # ------------------------------------------------------------------
     # Public entry-point
@@ -458,7 +501,10 @@ class TocTreeBuilder:
                 originality=self._fmt_pct(float(result.originalities[i])),
             ))
 
-        # Build section headings.
+        # Collect per-section data for batch title generation.
+        section_data: list[dict] = []  # parallel with section_entries below
+        section_entries: list[TocEntry] = []
+
         for label in real_clusters:
             idx = np.where(result.labels == label)[0]
             sec_docs = [docs[i] for i in idx]
@@ -471,19 +517,50 @@ class TocTreeBuilder:
             else:
                 children = self._make_leaves(sec_docs, sec_ids, sec_orig)
 
-            entries.append(TocEntry(
-                title=self._titler.generate(sec_docs),
+            # Placeholder title – will be replaced by LLM or TF-IDF below.
+            section_entries.append(TocEntry(
+                title="",
                 type="heading",
                 level=1,
                 originality=self._fmt_pct(float(sec_orig.mean())),
                 children=children,
             ))
+            section_data.append({
+                "ideas": sec_docs,
+                "num_ideas": len(sec_ids),
+            })
+
+        # Generate titles: LLM batch call first, TF-IDF per-section fallback.
+        titles = self._generate_section_titles(section_data)
+        for entry, title in zip(section_entries, titles, strict=False):
+            entry.title = title
+
+        entries.extend(section_entries)
+
+        # Apply narrative ordering if an orderer is available.
+        if self._orderer is not None:
+            entries = self._orderer.order(entries)
 
         return entries
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _generate_section_titles(
+        self, section_data: list[dict],
+    ) -> list[str]:
+        """Generate titles for all sections, using LLM batch call with TF-IDF fallback."""
+        if self._llm is not None:
+            try:
+                return self._llm.generate_titles(section_data)
+            except Exception:
+                logger.warning("LLM title generation failed, falling back to TF-IDF")
+
+        return [
+            self._titler.generate(sec.get("ideas", []))
+            for sec in section_data
+        ]
 
     def _build_chapters(
         self,
@@ -573,14 +650,16 @@ class DataSimilarity:
         analyzer: Any = None,
         title_generator: TitleGenerator | None = None,
         tree_builder: TocTreeBuilder | None = None,
+        llm: "LlmPort | None" = None,
     ) -> None:
         _titler = title_generator or TitleGenerator()
+        _orderer = SectionOrderer(llm) if llm is not None else None
 
         if tree_builder is not None:
             _tree_builder = tree_builder
         elif analyzer is not None:
             # Caller supplied a custom analyzer → use it for both levels.
-            _tree_builder = TocTreeBuilder(analyzer, _titler)
+            _tree_builder = TocTreeBuilder(analyzer, _titler, llm=llm, orderer=_orderer)
         else:
             # Default: constrained analyzers tuned for sections and chapters.
             _section_analyzer = ConstrainedClusteringAnalyzer(
@@ -590,7 +669,8 @@ class DataSimilarity:
                 min_clusters=2, max_clusters=4
             )
             _tree_builder = TocTreeBuilder(
-                _section_analyzer, _titler, chapter_analyzer=_chapter_analyzer
+                _section_analyzer, _titler, chapter_analyzer=_chapter_analyzer,
+                llm=llm, orderer=_orderer,
             )
 
         self._repo: IdeaRepository = repository or ChromaClient()
