@@ -1636,3 +1636,99 @@ class TestUsersAPI:
         response = client.get("/users", headers=headers)
         assert response.status_code == 500
         assert "Error retrieving users" in response.json()["detail"]
+
+
+@pytest.mark.unit
+class TestTokenCreation:
+    """Unit tests for JWT token creation and type-claim enforcement."""
+
+    def test_create_access_token_includes_type_claim_access(self):
+        from backend.main import create_access_token, SECRET_KEY, ALGORITHM
+        from jose import jwt
+
+        token = create_access_token({"sub": "a@b.com"}, jwt_kind="access")
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        assert payload["type"] == "access"
+
+    def test_create_refresh_token_includes_type_claim_refresh(self):
+        from backend.main import create_access_token, SECRET_KEY, ALGORITHM
+        from jose import jwt
+        from datetime import timedelta
+
+        token = create_access_token(
+            {"sub": "a@b.com"},
+            expires_delta=timedelta(days=7),
+            jwt_kind="refresh",
+        )
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        assert payload["type"] == "refresh"
+
+    def test_default_token_type_is_access(self):
+        from backend.main import create_access_token, SECRET_KEY, ALGORITHM
+        from jose import jwt
+
+        token = create_access_token({"sub": "a@b.com"})
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        assert payload["type"] == "access"
+
+    def test_get_current_user_rejects_refresh_token_as_access(self):
+        from backend.main import create_access_token
+        from datetime import timedelta
+        from unittest.mock import patch as _patch
+
+        refresh_token = create_access_token(
+            {"sub": "a@b.com"},
+            expires_delta=timedelta(days=7),
+            jwt_kind="refresh",
+        )
+        headers = {"Authorization": f"Bearer {refresh_token}"}
+        with _patch("backend.main.get_ideas", return_value=[]):
+            response = client.get("/ideas", headers=headers)
+        assert response.status_code == 401
+
+    def test_verify_otp_returns_both_tokens(self):
+        with patch("backend.main.verify_access", return_value=True):
+            response = client.post(
+                "/verify-otp",
+                json={"email": "test@example.com", "otp_code": "123456"},
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert "access_token" in body
+        assert "refresh_token" in body
+        assert body["access_token"]
+        assert body["refresh_token"]
+
+    def test_verify_otp_access_token_is_short_lived(self):
+        from backend.main import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+        from jose import jwt
+        from datetime import datetime
+
+        with patch("backend.main.verify_access", return_value=True):
+            response = client.post(
+                "/verify-otp",
+                json={"email": "test@example.com", "otp_code": "123456"},
+            )
+        token = response.json()["access_token"]
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        exp = datetime.utcfromtimestamp(payload["exp"])
+        diff = (exp - datetime.utcnow()).total_seconds()
+        assert 0 < diff <= ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+    def test_verify_otp_refresh_token_is_long_lived(self):
+        from backend.main import SECRET_KEY, ALGORITHM, REFRESH_TOKEN_EXPIRE_DAYS
+        from jose import jwt
+        from datetime import datetime
+
+        with patch("backend.main.verify_access", return_value=True):
+            response = client.post(
+                "/verify-otp",
+                json={"email": "test@example.com", "otp_code": "123456"},
+            )
+        token = response.json()["refresh_token"]
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        exp = datetime.utcfromtimestamp(payload["exp"])
+        diff = (exp - datetime.utcnow()).total_seconds()
+        # At least 6 days worth of seconds to confirm it's long-lived
+        assert diff > 6 * 24 * 3600
+        assert diff <= REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600

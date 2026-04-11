@@ -25,18 +25,22 @@ export function AuthProvider({ children }) {
     return payload ? { email: payload.sub, is_admin: !!payload.is_admin } : null;
   });
 
-  /** Store the token and decode user info. */
-  function login(token) {
-    localStorage.setItem('access_token', token);
-    const payload = decodeToken(token);
+  /** Store both tokens and decode user info from the access token. */
+  function login(accessToken, refreshToken) {
+    localStorage.setItem('access_token', accessToken);
+    if (refreshToken) {
+      localStorage.setItem('refresh_token', refreshToken);
+    }
+    const payload = decodeToken(accessToken);
     if (payload) {
       setUser({ email: payload.sub, is_admin: !!payload.is_admin });
     }
   }
 
-  /** Clear the token and reset user state. */
+  /** Clear all tokens and reset user state. */
   function logout() {
     localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     localStorage.removeItem('isAuthenticated');
     setUser(null);
   }

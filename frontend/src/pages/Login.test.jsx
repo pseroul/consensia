@@ -179,7 +179,7 @@ describe('Login — successful authentication', () => {
     vi.clearAllMocks();
     localStorage.clear();
     verifyOtp.mockResolvedValue({
-      data: { status: 'success', access_token: 'jwt-token-abc' },
+      data: { status: 'success', access_token: 'jwt-token-abc', refresh_token: 'refresh-xyz' },
     });
   });
 
@@ -193,12 +193,12 @@ describe('Login — successful authentication', () => {
     }));
   });
 
-  it('calls login() from AuthContext with the JWT token on success', async () => {
+  it('calls login() from AuthContext with access and refresh tokens on success', async () => {
     renderLogin();
     fillForm();
     fireEvent.submit(document.querySelector('form'));
     await waitFor(() =>
-      expect(mockLogin).toHaveBeenCalledWith('jwt-token-abc')
+      expect(mockLogin).toHaveBeenCalledWith('jwt-token-abc', 'refresh-xyz')
     );
   });
 

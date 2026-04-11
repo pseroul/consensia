@@ -65,8 +65,8 @@ const Login = () => {
       
       // Check if authentication was successful
       if (response && response.data && response.data.status === 'success') {
-        // Store JWT token and decode user info via AuthContext
-        login(response.data.access_token);
+        // Store access + refresh tokens and decode user info via AuthContext
+        login(response.data.access_token, response.data.refresh_token);
         setSuccess(true);
         // Navigate to dashboard
         navigate('/dashboard');

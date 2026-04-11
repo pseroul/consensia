@@ -29,10 +29,10 @@ function Consumer() {
   );
 }
 
-function LoginConsumer() {
+function LoginConsumer({ refreshToken } = {}) {
   const { login } = useAuth();
   return (
-    <button onClick={() => login('TOKEN')} data-testid="login-btn">
+    <button onClick={() => login('TOKEN', refreshToken)} data-testid="login-btn">
       Login
     </button>
   );
@@ -117,7 +117,7 @@ describe('AuthContext — login()', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => localStorage.clear());
 
-  it('stores token in localStorage', async () => {
+  it('stores access_token in localStorage', async () => {
     render(
       <AuthProvider>
         <LoginConsumer />
@@ -129,12 +129,38 @@ describe('AuthContext — login()', () => {
     });
     expect(localStorage.getItem('access_token')).toBe('TOKEN');
   });
+
+  it('stores refresh_token in localStorage when provided', async () => {
+    render(
+      <AuthProvider>
+        <LoginConsumer refreshToken="RTOKEN" />
+        <Consumer />
+      </AuthProvider>
+    );
+    await act(async () => {
+      screen.getByTestId('login-btn').click();
+    });
+    expect(localStorage.getItem('refresh_token')).toBe('RTOKEN');
+  });
+
+  it('does not write refresh_token when not provided', async () => {
+    render(
+      <AuthProvider>
+        <LoginConsumer />
+        <Consumer />
+      </AuthProvider>
+    );
+    await act(async () => {
+      screen.getByTestId('login-btn').click();
+    });
+    expect(localStorage.getItem('refresh_token')).toBeNull();
+  });
 });
 
 describe('AuthContext — logout()', () => {
   afterEach(() => localStorage.clear());
 
-  it('clears the token and sets isAuthenticated to false', async () => {
+  it('clears access_token and sets isAuthenticated to false', async () => {
     localStorage.setItem('access_token', NON_ADMIN_TOKEN);
     render(
       <AuthProvider>
@@ -150,5 +176,20 @@ describe('AuthContext — logout()', () => {
 
     expect(screen.getByTestId('authenticated').textContent).toBe('false');
     expect(localStorage.getItem('access_token')).toBeNull();
+  });
+
+  it('also clears refresh_token on logout', async () => {
+    localStorage.setItem('access_token', NON_ADMIN_TOKEN);
+    localStorage.setItem('refresh_token', 'some-refresh-token');
+    render(
+      <AuthProvider>
+        <LogoutConsumer />
+        <Consumer />
+      </AuthProvider>
+    );
+    await act(async () => {
+      screen.getByTestId('logout-btn').click();
+    });
+    expect(localStorage.getItem('refresh_token')).toBeNull();
   });
 });

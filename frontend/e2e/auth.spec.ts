@@ -17,13 +17,17 @@
 import { test, expect } from '@playwright/test';
 import {
   setAuthToken,
+  setAuthTokens,
   clearAuthToken,
   getStoredToken,
+  getStoredRefreshToken,
   mockVerifyOtp,
   mockGetIdeas,
   mockGetUserIdeas,
   mockAllRoutes401,
+  mockRefreshFail,
   FAKE_TOKEN,
+  FAKE_REFRESH_TOKEN,
   MOCK_IDEAS,
 } from './fixtures';
 
@@ -143,7 +147,12 @@ test.describe('Login API flow', () => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'success', access_token: FAKE_TOKEN, token_type: 'bearer' }),
+        body: JSON.stringify({
+          status: 'success',
+          access_token: FAKE_TOKEN,
+          refresh_token: FAKE_REFRESH_TOKEN,
+          token_type: 'bearer',
+        }),
       });
     });
     await mockGetIdeas(page);
@@ -245,6 +254,64 @@ test.describe('Logout', () => {
 
     await page.waitForURL('/');
     await expect(page.locator('#email')).toBeVisible();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Refresh token flow
+// ---------------------------------------------------------------------------
+
+test.describe('Refresh token flow', () => {
+  test('successful login stores both access_token and refresh_token', async ({ page }) => {
+    await mockVerifyOtp(page, true);
+    await mockGetIdeas(page);
+    await mockGetUserIdeas(page);
+
+    await page.goto('/');
+    await clearAuthToken(page);
+    await page.evaluate(() => localStorage.removeItem('refresh_token'));
+
+    await page.locator('#email').fill('user@example.com');
+    await page.locator('#otp').fill('123456');
+    await page.getByRole('button', { name: /verify and enter/i }).click();
+    await page.waitForURL('/dashboard');
+
+    expect(await getStoredToken(page)).toBe(FAKE_TOKEN);
+    expect(await getStoredRefreshToken(page)).toBe(FAKE_REFRESH_TOKEN);
+  });
+
+  test('401 + refresh fails clears both tokens and redirects to /', async ({ page }) => {
+    await page.goto('/');
+    await setAuthTokens(page);
+
+    // Register mockRefreshFail AFTER mockAllRoutes401 so it takes precedence for /auth/refresh
+    await mockAllRoutes401(page);
+    await mockRefreshFail(page);
+
+    await page.goto('/dashboard');
+    await page.waitForURL('/');
+
+    expect(await getStoredToken(page)).toBeNull();
+    expect(await getStoredRefreshToken(page)).toBeNull();
+  });
+
+  test('logout removes both access_token and refresh_token', async ({ page }) => {
+    await mockGetIdeas(page);
+    await mockGetUserIdeas(page);
+
+    await page.goto('/');
+    await setAuthTokens(page);
+    await page.goto('/dashboard');
+    await page.waitForURL('/dashboard');
+
+    // Trigger logout
+    await page.getByRole('button', { name: '' }).first().click();
+    await page.getByRole('button', { name: /disconnect/i }).click();
+    await page.waitForURL('/');
+
+    expect(await getStoredToken(page)).toBeNull();
+    expect(await getStoredRefreshToken(page)).toBeNull();
   });
 });
 

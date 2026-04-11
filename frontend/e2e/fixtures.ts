@@ -16,6 +16,7 @@ import { Page, Route } from '@playwright/test';
 
 export const API_URL = process.env.VITE_API_URL ?? 'http://localhost:8000';
 export const FAKE_TOKEN = 'e2e-fake-jwt-token';
+export const FAKE_REFRESH_TOKEN = 'e2e-fake-refresh-token';
 
 // ---------------------------------------------------------------------------
 // localStorage helpers
@@ -31,6 +32,56 @@ export async function clearAuthToken(page: Page): Promise<void> {
 
 export async function getStoredToken(page: Page): Promise<string | null> {
   return page.evaluate(() => localStorage.getItem('access_token'));
+}
+
+export async function setRefreshToken(page: Page, token = FAKE_REFRESH_TOKEN): Promise<void> {
+  await page.evaluate((t) => localStorage.setItem('refresh_token', t), token);
+}
+
+export async function getStoredRefreshToken(page: Page): Promise<string | null> {
+  return page.evaluate(() => localStorage.getItem('refresh_token'));
+}
+
+export async function setAuthTokens(
+  page: Page,
+  accessToken = FAKE_TOKEN,
+  refreshToken = FAKE_REFRESH_TOKEN,
+): Promise<void> {
+  await page.evaluate(
+    ([a, r]) => {
+      localStorage.setItem('access_token', a);
+      localStorage.setItem('refresh_token', r);
+    },
+    [accessToken, refreshToken],
+  );
+}
+
+export function mockRefreshSuccess(
+  page: Page,
+  newAccessToken = FAKE_TOKEN,
+  newRefreshToken = FAKE_REFRESH_TOKEN,
+): Promise<void> {
+  return page.route(`${API_URL}/auth/refresh`, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        access_token: newAccessToken,
+        refresh_token: newRefreshToken,
+        token_type: 'bearer',
+      }),
+    })
+  );
+}
+
+export function mockRefreshFail(page: Page): Promise<void> {
+  return page.route(`${API_URL}/auth/refresh`, (route: Route) =>
+    route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'Could not validate refresh token' }),
+    })
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +146,12 @@ export function mockDeleteIdea(page: Page, id: number): Promise<void> {
   });
 }
 
-export function mockVerifyOtp(page: Page, success: boolean, token = FAKE_TOKEN): Promise<void> {
+export function mockVerifyOtp(
+  page: Page,
+  success: boolean,
+  token = FAKE_TOKEN,
+  refreshToken = FAKE_REFRESH_TOKEN,
+): Promise<void> {
   return page.route(`${API_URL}/verify-otp`, (route: Route) => {
     if (success) {
       route.fulfill({
@@ -105,6 +161,7 @@ export function mockVerifyOtp(page: Page, success: boolean, token = FAKE_TOKEN):
           status: 'success',
           message: 'Connection authorized',
           access_token: token,
+          refresh_token: refreshToken,
           token_type: 'bearer',
         }),
       });

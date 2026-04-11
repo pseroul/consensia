@@ -29,6 +29,7 @@ logger = logging.getLogger("uvicorn.error")
 SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'your-secret-key-here-change-in-production')
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # Initialisation of the database and variable
 set_env_var()
@@ -139,6 +140,15 @@ class LoginRequest(BaseModel):
     otp_code: str
 
 
+class RefreshRequest(BaseModel):
+    """Payload for silent token refresh.
+
+    Attributes:
+        refresh_token (str): A valid, unexpired refresh token.
+    """
+    refresh_token: str
+
+
 class AdminUserCreate(BaseModel):
     """Payload for admin user creation.
 
@@ -181,17 +191,23 @@ def get_db():
     conn.close()
 
 # JWT Utility Functions
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create a JWT access token.
-    
+def create_access_token(
+    data: dict,
+    expires_delta: Optional[timedelta] = None,
+    jwt_kind: str = "access",
+) -> str:
+    """Create a JWT token (access or refresh).
+
     Args:
-        data (dict): Data to encode in the token
-        expires_delta (Optional[timedelta]): Token expiration time
-        
+        data (dict): Data to encode in the token.
+        expires_delta (Optional[timedelta]): Token expiration time.
+        jwt_kind (str): Either "access" (default) or "refresh".
+
     Returns:
-        str: JWT access token
+        str: Encoded JWT token.
     """
     to_encode = data.copy()
+    to_encode.update({"type": jwt_kind})
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
@@ -221,6 +237,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
+            raise credentials_exception
+        if payload.get("type", "access") != "access":
             raise credentials_exception
         is_admin: bool = bool(payload.get("is_admin", False))
         return {"email": email, "is_admin": is_admin}
@@ -1086,19 +1104,73 @@ def verify_otp(request: LoginRequest) -> dict[str, str]:
             is_admin = bool(user["is_admin"]) if user else False
         except Exception:
             is_admin = False
-        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        token_data = {"sub": request.email, "is_admin": is_admin}
         access_token = create_access_token(
-            data={"sub": request.email, "is_admin": is_admin},
-            expires_delta=access_token_expires,
+            data=token_data,
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+            jwt_kind="access",
+        )
+        refresh_token = create_access_token(
+            data=token_data,
+            expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+            jwt_kind="refresh",
         )
         return {
             "status": "success",
             "message": "Connection authorized",
             "access_token": access_token,
+            "refresh_token": refresh_token,
             "token_type": "bearer",
         }
     else:
         raise HTTPException(status_code=401, detail="Invalid or expired code")
+
+
+@app.post("/auth/refresh")
+def refresh_tokens(request: RefreshRequest) -> dict[str, str]:
+    """Exchange a valid refresh token for a new access + refresh token pair.
+
+    Args:
+        request (RefreshRequest): Body containing the refresh_token.
+
+    Returns:
+        dict[str, str]: New access_token and refresh_token.
+
+    Raises:
+        HTTPException: 401 if the token is invalid, expired, or not a refresh token.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate refresh token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(request.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        tok_kind: str = payload.get("type", "access")
+        if email is None or tok_kind != "refresh":
+            raise credentials_exception
+        is_admin: bool = bool(payload.get("is_admin", False))
+    except JWTError:
+        raise credentials_exception from None
+
+    token_data = {"sub": email, "is_admin": is_admin}
+    new_access_token = create_access_token(
+        data=token_data,
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        jwt_kind="access",
+    )
+    new_refresh_token = create_access_token(
+        data=token_data,
+        expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        jwt_kind="refresh",
+    )
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+    }
+
 
 if __name__ == "__main__":
         

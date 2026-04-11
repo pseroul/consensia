@@ -23,18 +23,82 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor to handle 401 Unauthorized errors
+// State for queuing concurrent requests that arrive while a refresh is in flight
+let isRefreshing = false;
+let failedQueue = [];
+
+function processQueue(error, token = null) {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+}
+
+function clearSession() {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('isAuthenticated');
+  window.location.href = '/';
+}
+
+// Add response interceptor: silently refresh on 401, redirect only when refresh fails
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      // Token expired or invalid, clear authentication
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('isAuthenticated');
-      // Redirect to login page
-      window.location.href = '/';
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Non-401 errors pass through immediately
+    if (!error.response || error.response.status !== 401) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    // Prevent infinite retry loop if the refresh endpoint itself returns 401
+    if (originalRequest.url === '/auth/refresh') {
+      clearSession();
+      return Promise.reject(error);
+    }
+
+    // Queue concurrent 401 failures while a refresh is already in flight
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then((newToken) => {
+          originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+          return api.request(originalRequest);
+        })
+        .catch((err) => Promise.reject(err));
+    }
+
+    const storedRefreshToken = localStorage.getItem('refresh_token');
+    if (!storedRefreshToken) {
+      // No refresh token available — force logout
+      processQueue(error, null);
+      clearSession();
+      return Promise.reject(error);
+    }
+
+    isRefreshing = true;
+    try {
+      const { data } = await api.post('/auth/refresh', {
+        refresh_token: storedRefreshToken,
+      });
+      localStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('refresh_token', data.refresh_token);
+      originalRequest.headers['Authorization'] = `Bearer ${data.access_token}`;
+      processQueue(null, data.access_token);
+      return api.request(originalRequest);
+    } catch (refreshError) {
+      processQueue(refreshError, null);
+      clearSession();
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 
