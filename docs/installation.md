@@ -445,7 +445,7 @@ Then trigger a TOC rebuild from the app (TOC page → **Update Structure**) and 
 
 If you prefer to keep all inference on-device — for privacy, zero cost, or air-gapped deployments — Ollama runs small language models locally. On a Raspberry Pi 5 with 16 GB RAM, a 3B-parameter model (e.g. `phi3:mini` or `llama3.2:3b`) produces acceptable titles with a generation time of roughly 5–15 seconds per TOC refresh.
 
-> **Hardware note:** Ollama runs on the CPU. The Raspberry Pi AI HAT+ (Hailo NPU) is **not** currently used by Ollama — Hailo accelerates vision models, not the transformer architectures Ollama serves. You may still see noticeable CPU load during TOC generation.
+> **Hardware note:** Vanilla Ollama runs on the CPU only. If you own a Raspberry Pi AI HAT+ 2 (Hailo-10H, 40 TOPS), see [Sub-option 2b](#sub-option-2b-hardware-accelerated-with-hailo-10h-ai-hat-2) below for a hardware-accelerated drop-in replacement.
 
 #### 1. Install Ollama on the Raspberry Pi
 
@@ -527,6 +527,113 @@ Check usage during a TOC refresh:
 free -h
 htop
 ```
+
+---
+
+### Sub-option 2b: Hardware-accelerated with Hailo-10H (AI HAT+ 2)
+
+Since the launch of the **Raspberry Pi AI HAT+ 2** (January 2026), Hailo ships an Ollama-compatible runtime called **`hailo-ollama`** that offloads LLM inference to the 40 TOPS Hailo-10H NPU and its 8 GB of dedicated on-board RAM. It uses the same REST API as vanilla Ollama, so Consensia's existing `OllamaLlmClient` works without any code changes — only environment variables change.
+
+Benefits vs. CPU Ollama on a Pi 5:
+
+- Inference offloaded to the NPU — the 4 ARM cores stay free for FastAPI, ChromaDB, and the UMAP pipeline
+- Models live in the 8 GB of VRAM on the HAT — no pressure on the Pi's system RAM
+- TOC generation drops from 5–15 s down to a few seconds on small models
+
+> **Prerequisite:** this path assumes you already completed [Option B — Raspberry Pi Production Deployment](#option-b-raspberry-pi-production-deployment) and have a Raspberry Pi AI HAT+ 2 physically installed. Follow the [AI HAT+ 2 setup in the Raspberry Pi docs](https://www.raspberrypi.com/documentation/computers/ai.html) to verify the NPU is detected (`hailortcli fw-control identify`).
+
+#### 1. Install the Hailo Gen-AI Model Zoo
+
+Download the GenAI runtime package from the [Hailo Developer Zone](https://hailo.ai/developer-zone/) (free registration required) — pick the `arm64` build matching your Raspberry Pi OS / Ubuntu version. Then install it:
+
+```bash
+sudo dpkg -i hailo_gen_ai_model_zoo_5.1.1_arm64.deb
+sudo apt-get install -f   # in case any dependency is missing
+```
+
+This installs the `hailo-ollama` binary and the tools to pull pre-compiled models from the Hailo Gen-AI Model Zoo.
+
+#### 2. Start the `hailo-ollama` server
+
+```bash
+hailo-ollama serve
+```
+
+By default the server listens on **port 8000**, which clashes with Consensia's backend. On a box that runs both, you must pick one of these:
+
+- **Recommended** — run `hailo-ollama` on a different port (e.g. `11434` to mimic vanilla Ollama):
+  ```bash
+  HAILO_OLLAMA_PORT=11434 hailo-ollama serve
+  ```
+- **Alternative** — move Consensia's backend to another port by editing `--bind 127.0.0.1:8001` in `/etc/systemd/system/consensia.service` and updating the `proxy_pass` in the nginx site file.
+
+To run `hailo-ollama` as a persistent service, create `/etc/systemd/system/hailo-ollama.service`:
+
+```ini
+[Unit]
+Description=Hailo Ollama server (Hailo-10H NPU)
+After=network.target
+
+[Service]
+User=youruser
+Environment="HAILO_OLLAMA_PORT=11434"
+ExecStart=/usr/bin/hailo-ollama serve
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now hailo-ollama.service
+```
+
+#### 3. Pull a model from the Hailo Gen-AI Model Zoo
+
+Only models pre-compiled for the Hailo-10H NPU are available. At the time of writing, the Model Zoo includes small instruction-tuned models such as `qwen2:1.5b`, `qwen2.5:3b`, `phi3:mini`, and `llama3.2:3b`.
+
+```bash
+hailo-ollama pull qwen2:1.5b
+```
+
+> **Note:** the exact list of supported tags evolves with each Model Zoo release. Run `hailo-ollama list` after installation to see what is currently available on your system, and check [Hailo's Model Zoo documentation](https://hailo.ai/developer-zone/documentation/) for the current catalogue.
+
+#### 4. Verify the server responds
+
+```bash
+curl http://localhost:11434/api/tags
+# Expected: {"models":[{"name":"qwen2:1.5b", ...}]}
+```
+
+#### 5. Configure Consensia
+
+Because `hailo-ollama` speaks the Ollama REST API, just point `OLLAMA_URL` at it. Edit `/etc/environment`:
+
+```
+OLLAMA_URL="http://localhost:11434"
+OLLAMA_MODEL="qwen2:1.5b"
+```
+
+Make sure `ANTHROPIC_API_KEY` is **not** set (or empty) so the factory in `backend/llm_client.py` falls through to the Ollama backend:
+
+```bash
+sudo systemctl restart consensia
+journalctl -u consensia -n 50 | grep -i llm
+# Expected: "OllamaLlmClient initialised (url=http://localhost:11434, model=qwen2:1.5b)"
+```
+
+Trigger a TOC rebuild from the app (**TOC → Update Structure**) and you should see NPU load jump on the Hailo device:
+
+```bash
+hailortcli monitor
+```
+
+#### 6. Fallback behaviour
+
+The Hailo-accelerated path is transparent to the rest of the code. If `hailo-ollama` stops or the NPU hangs, Consensia's `OllamaLlmClient` will raise `LlmUnavailableError`, the `TfidfFallbackClient` takes over, and the TOC still regenerates — just with keyword-style titles. No manual intervention needed.
 
 ---
 
