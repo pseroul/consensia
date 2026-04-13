@@ -162,13 +162,15 @@ class TestBookAuthors:
         emails = {a["email"] for a in authors}
         assert emails == {alice["email"], bob["email"]}
 
-    def test_get_authors_empty_when_none_added(self, client, alice):
+    def test_create_book_auto_adds_creator_as_author(self, client, alice):
+        """Creating a book must automatically add the creator as an author."""
         book_id = client.post(
-            "/books", json={"title": "Authorless"}, headers=alice["headers"]
+            "/books", json={"title": "Auto Author"}, headers=alice["headers"]
         ).json()["id"]
 
         authors = client.get(f"/books/{book_id}/authors", headers=alice["headers"]).json()
-        assert authors == []
+        emails = [a["email"] for a in authors]
+        assert alice["email"] in emails
 
     def test_duplicate_author_silently_ignored(self, client, alice, db_path):
         """Adding the same author twice must not crash (IntegrityError swallowed)."""

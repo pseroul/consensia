@@ -734,6 +734,9 @@ async def create_book(book: BookItem, current_user: dict = Depends(get_current_u
     """
     try:
         new_id = add_book(book.title)
+        user = get_user_by_email(current_user["email"])
+        if user:
+            add_book_author(new_id, user["id"])
         return {"id": new_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating book: {str(e)}") from e
