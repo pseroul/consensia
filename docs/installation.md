@@ -205,19 +205,7 @@ Create `backend/data/site.json` — include your domain (and localhost for testi
 }
 ```
 
-Set the JWT secret key persistently (edit `/etc/environment` so it survives reboots):
-
-```bash
-sudo nano /etc/environment
-```
-
-Add this line:
-
-```
-JWT_SECRET_KEY="replace-with-a-long-random-string"
-```
-
-Generate a secure value:
+Generate a JWT secret key — keep the printed value, you will paste it into the systemd unit file in [Step 10](#step-10--create-the-systemd-service):
 
 ```bash
 python3 -c "import secrets; print(secrets.token_hex(32))"
@@ -324,8 +312,8 @@ After=network.target
 [Service]
 User=youruser
 WorkingDirectory=/home/youruser/consensia/backend
-EnvironmentFile=/etc/environment
 Environment="PATH=/home/youruser/consensia/backend/venv/bin"
+Environment="JWT_SECRET_KEY=paste-the-secret-from-step-6-here"
 ExecStart=/home/youruser/consensia/backend/venv/bin/gunicorn \
     -w 1 \
     -k uvicorn.workers.UvicornWorker \
@@ -335,6 +323,8 @@ ExecStart=/home/youruser/consensia/backend/venv/bin/gunicorn \
 [Install]
 WantedBy=multi-user.target
 ```
+
+> Optional LLM env vars (`ANTHROPIC_API_KEY`, `OLLAMA_URL`, `OLLAMA_MODEL`, `LLM_MODEL`) go in the same `[Service]` section as additional `Environment=` lines. See [LLM Backends for Table of Contents](#optional-llm-backends-for-table-of-contents) below.
 
 Enable and start the service:
 
@@ -422,8 +412,6 @@ Optionally override the default model on another line (only needed if you want a
 ```ini
 Environment="LLM_MODEL=claude-haiku-4-5-20251001"
 ```
-
-> **Note:** earlier versions of this guide suggested putting env vars in `/etc/environment`. That still works **if the file exists** and your unit has `EnvironmentFile=/etc/environment`, but adding `Environment=` lines directly in the unit file is simpler and works on every image (including minimal Raspberry Pi OS builds where `/etc/environment` is absent).
 
 Reload and restart the service to apply:
 

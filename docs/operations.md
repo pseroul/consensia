@@ -314,9 +314,10 @@ sudo systemctl restart consensia
 **Check the JWT secret:**
 
 ```bash
-echo $JWT_SECRET_KEY              # should print the secret
-cat /etc/environment              # check it's persisted
+sudo systemctl show consensia -p Environment | tr ' ' '\n' | grep JWT_SECRET_KEY
 ```
+
+This prints the value systemd will inject into the service. If it is missing or empty, edit the unit file (`sudo systemctl edit --full consensia.service`), make sure the `[Service]` section contains `Environment="JWT_SECRET_KEY=..."`, then `sudo systemctl daemon-reload && sudo systemctl restart consensia`.
 
 **Check OTP sync:**
 
