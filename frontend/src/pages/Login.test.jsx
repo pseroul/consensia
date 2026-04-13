@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ─── Restore real React hooks (overrides global setupTests.js mock) ───────────
 vi.mock('react', async (importOriginal) => {
@@ -42,8 +42,9 @@ vi.mock('react-router-dom', async (importOriginal) => {
 
 // ─── Mock AuthContext ─────────────────────────────────────────────────────────
 const mockLogin = vi.fn();
+let mockIsAuthenticated = false;
 vi.mock('../contexts/AuthContext', () => ({
-  useAuth: () => ({ login: mockLogin }),
+  useAuth: () => ({ login: mockLogin, isAuthenticated: mockIsAuthenticated }),
 }));
 
 // ─── Mock API ─────────────────────────────────────────────────────────────────
@@ -64,9 +65,36 @@ const fillForm = (email = 'user@test.com', otp = '123456') => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
+describe('Login — already authenticated redirect', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsAuthenticated = false;
+  });
+
+  afterEach(() => {
+    mockIsAuthenticated = false;
+  });
+
+  it('redirects to /dashboard when user is already authenticated', async () => {
+    mockIsAuthenticated = true;
+    renderLogin();
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/dashboard', { replace: true })
+    );
+  });
+
+  it('does not redirect when user is not authenticated', () => {
+    mockIsAuthenticated = false;
+    renderLogin();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 describe('Login — rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsAuthenticated = false;
   });
 
   it('renders the page heading "Secure Access"', () => {
@@ -104,6 +132,7 @@ describe('Login — rendering', () => {
 describe('Login — OTP input validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsAuthenticated = false;
   });
 
   it('allows typing numeric digits', () => {
@@ -140,6 +169,7 @@ describe('Login — OTP input validation', () => {
 describe('Login — form validation guards', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsAuthenticated = false;
   });
 
   it('shows error when email is empty on submit', () => {
@@ -177,6 +207,7 @@ describe('Login — form validation guards', () => {
 describe('Login — successful authentication', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsAuthenticated = false;
     localStorage.clear();
     verifyOtp.mockResolvedValue({
       data: { status: 'success', access_token: 'jwt-token-abc', refresh_token: 'refresh-xyz' },
@@ -223,6 +254,7 @@ describe('Login — successful authentication', () => {
 describe('Login — failed authentication', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsAuthenticated = false;
     localStorage.clear();
   });
 
@@ -269,6 +301,7 @@ describe('Login — failed authentication', () => {
 describe('Login — loading state', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsAuthenticated = false;
   });
 
   it('disables the submit button while loading', async () => {
@@ -306,6 +339,7 @@ describe('Login — loading state', () => {
 describe('Login — error clearing on user input', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsAuthenticated = false;
   });
 
   it('clears the error when the user types in the email field', () => {

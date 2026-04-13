@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, ShieldCheck, LogIn, Loader2 } from 'lucide-react';
 import { verifyOtp } from '../services/api';
@@ -23,8 +23,15 @@ import { useAuth } from '../contexts/AuthContext';
 const Login = () => {
   // Navigation hook for routing
   const navigate = useNavigate();
-  const { login } = useAuth();
-  
+  const { login, isAuthenticated } = useAuth();
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
   // State management for form data
   const [email, setEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
