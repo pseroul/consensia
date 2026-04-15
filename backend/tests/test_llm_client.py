@@ -16,6 +16,7 @@ from backend.llm_client import (
     _parse_json_array,
     _build_title_sections_block,
     _build_order_sections_block,
+    _build_summarize_texts_block,
 )
 
 
@@ -79,7 +80,6 @@ class TestPromptBuilders:
     def test_title_block_truncates_long_ideas(self):
         sections = [{"ideas": ["x" * 200], "num_ideas": 1}]
         block = _build_title_sections_block(sections)
-        # Each idea line should be truncated to 150 chars
         for line in block.split("\n"):
             if line.startswith("- "):
                 assert len(line) <= 152  # "- " + 150 chars
@@ -90,6 +90,17 @@ class TestPromptBuilders:
         assert "1." in block
         assert "2." in block
 
+    def test_summarize_block_contains_text_numbers(self):
+        block = _build_summarize_texts_block(["hello", "world"])
+        assert "Text 1:" in block
+        assert "Text 2:" in block
+        assert "hello" in block
+        assert "world" in block
+
+    def test_summarize_block_truncates_long_texts(self):
+        block = _build_summarize_texts_block(["x" * 2000])
+        assert len(block) < 2000  # truncated to 1000 chars per text
+
 
 # ---------------------------------------------------------------------------
 # ClaudeLlmClient
@@ -99,7 +110,6 @@ class TestPromptBuilders:
 class TestClaudeLlmClient:
     def test_raises_without_api_key(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        # Mock anthropic import
         mock_anthropic = MagicMock()
         with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
             with pytest.raises(LlmUnavailableError, match="ANTHROPIC_API_KEY"):
@@ -217,6 +227,69 @@ class TestClaudeLlmClient:
             with pytest.raises(LlmUnavailableError, match="Claude API error"):
                 client.generate_titles(_sample_sections(1))
 
+    def test_summarize_texts_success(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        mock_anthropic = MagicMock()
+        mock_client = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text='["Summary A", "Summary B"]')]
+        mock_client.messages.create.return_value = mock_response
+
+        with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
+            client = ClaudeLlmClient(api_key="test-key")
+            result = client.summarize_texts(["Long text A", "Long text B"])
+
+        assert result == ["Summary A", "Summary B"]
+
+    def test_summarize_texts_empty_returns_empty(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        mock_anthropic = MagicMock()
+        with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
+            client = ClaudeLlmClient(api_key="test-key")
+            assert client.summarize_texts([]) == []
+
+    def test_summarize_texts_wrong_count_raises(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        mock_anthropic = MagicMock()
+        mock_client = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text='["Only one"]')]
+        mock_client.messages.create.return_value = mock_response
+
+        with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
+            client = ClaudeLlmClient(api_key="test-key")
+            with pytest.raises(LlmUnavailableError, match="Expected 2"):
+                client.summarize_texts(["text one", "text two"])
+
+    def test_summarize_texts_batching(self, monkeypatch):
+        """More than 20 texts should trigger multiple _call invocations."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        mock_anthropic = MagicMock()
+        mock_client = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        def make_response(texts_count):
+            mock_response = MagicMock()
+            mock_response.content = [MagicMock(text=json.dumps([f"s{i}" for i in range(texts_count)]))]
+            return mock_response
+
+        # 25 texts → 2 batches (20 + 5)
+        mock_client.messages.create.side_effect = [
+            make_response(20),
+            make_response(5),
+        ]
+
+        with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
+            client = ClaudeLlmClient(api_key="test-key")
+            result = client.summarize_texts([f"text {i}" for i in range(25)])
+
+        assert len(result) == 25
+        assert mock_client.messages.create.call_count == 2
+
 
 # ---------------------------------------------------------------------------
 # OllamaLlmClient
@@ -260,6 +333,37 @@ class TestOllamaLlmClient:
             with pytest.raises(LlmUnavailableError, match="Ollama error"):
                 client.generate_titles(_sample_sections(1))
 
+    def test_summarize_texts_success(self):
+        response_body = json.dumps({"response": '["Summary A", "Summary B"]'}).encode()
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = response_body
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("backend.llm_client.urlopen", return_value=mock_resp):
+            client = OllamaLlmClient(base_url="http://fake:11434", model="test")
+            result = client.summarize_texts(["Long text A", "Long text B"])
+
+        assert result == ["Summary A", "Summary B"]
+
+    def test_summarize_texts_empty_returns_empty(self):
+        client = OllamaLlmClient(base_url="http://fake:11434", model="test")
+        assert client.summarize_texts([]) == []
+
+    def test_summarize_texts_wrong_count_raises(self):
+        response_body = json.dumps({"response": '["Only one"]'}).encode()
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = response_body
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("backend.llm_client.urlopen", return_value=mock_resp):
+            client = OllamaLlmClient(base_url="http://fake:11434", model="test")
+            with pytest.raises(LlmUnavailableError, match="Expected 2"):
+                client.summarize_texts(["text one", "text two"])
+
 
 # ---------------------------------------------------------------------------
 # TfidfFallbackClient
@@ -283,6 +387,16 @@ class TestTfidfFallbackClient:
         client = TfidfFallbackClient()
         assert client.generate_titles([]) == []
         assert client.order_sections([]) == []
+
+    def test_summarize_texts_passthrough(self):
+        """TfidfFallbackClient must return texts unchanged."""
+        client = TfidfFallbackClient()
+        texts = ["hello world", "foo bar baz"]
+        assert client.summarize_texts(texts) == texts
+
+    def test_summarize_texts_empty(self):
+        client = TfidfFallbackClient()
+        assert client.summarize_texts([]) == []
 
 
 # ---------------------------------------------------------------------------

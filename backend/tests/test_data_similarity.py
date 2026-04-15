@@ -37,6 +37,7 @@ def _make_idea_data(n: int = 10, dim: int = 8) -> IdeaData:
         documents=[f"This is idea number {i} about topic {i % 3}" for i in range(n)],
         ids=[f"id_{i}" for i in range(n)],
         embeddings=_random_embeddings(n, dim),
+        metadatas=[{"title": f"id_{i}", "tags": "", "description": f"Description for idea {i}"} for i in range(n)],
     )
 
 
@@ -62,6 +63,7 @@ class FakeRepository:
             "documents": self._data.documents,
             "ids": self._data.ids,
             "embeddings": self._data.embeddings,
+            "metadatas": self._data.metadatas,
         }
 
 
@@ -250,6 +252,18 @@ class TestConstrainedClusteringAnalyzer:
         n_clusters = len(np.unique(result.labels))
         assert 1 <= n_clusters <= 4
 
+    def test_per_cluster_originality_normalisation(self):
+        """Each cluster's max originality must be 1.0 (per-cluster normalisation)."""
+        analyzer = ConstrainedClusteringAnalyzer(min_clusters=2, max_clusters=3)
+        result = analyzer.analyze(_random_embeddings(20, dim=16, seed=1))
+        for label in np.unique(result.labels):
+            mask = result.labels == label
+            cluster_origs = result.originalities[mask]
+            if len(cluster_origs) > 1:
+                assert cluster_origs.max() == pytest.approx(1.0, abs=1e-5), (
+                    f"Cluster {label} max originality not 1.0: {cluster_origs.max()}"
+                )
+
 
 # ---------------------------------------------------------------------------
 # TitleGenerator
@@ -277,7 +291,6 @@ class TestTitleGenerator:
     def test_title_is_capitalised(self):
         docs = ["alpha beta", "alpha gamma", "alpha delta"]
         title = TitleGenerator().generate(docs)
-        # Every term should start with a capital letter
         for word in title.split(" & "):
             assert word[0].isupper(), f"'{word}' not capitalised in '{title}'"
 
@@ -364,6 +377,24 @@ class TestTocTreeBuilder:
         found_ids = collect_ids(entries)
         assert sorted(found_ids) == sorted(data.ids)
 
+    def test_leaf_text_comes_from_metadata(self):
+        """Leaf text must equal metadata['description'], not the raw document."""
+        builder = self._make_builder()
+        data = _make_idea_data(n=3)
+        entries = builder.build(data)
+
+        def collect_leaves(nodes):
+            leaves = []
+            for n in nodes:
+                if n.type == "idea":
+                    leaves.append(n)
+                leaves.extend(collect_leaves(n.children))
+            return leaves
+
+        for leaf in collect_leaves(entries):
+            idx = data.ids.index(leaf.id)
+            assert leaf.text == data.metadatas[idx]["description"]
+
 
 # ---------------------------------------------------------------------------
 # DataSimilarity (integration-level with stubs)
@@ -425,13 +456,14 @@ class TestDataSimilarity:
 # ---------------------------------------------------------------------------
 
 class FakeLlm:
-    """LlmPort stub that returns deterministic titles and ordering."""
+    """LlmPort stub that returns deterministic titles, ordering, and summaries."""
 
     def __init__(self, titles: list[str] | None = None, order: list[int] | None = None):
         self._titles = titles
         self._order = order
         self.generate_calls: list = []
         self.order_calls: list = []
+        self.summarize_calls: list = []
 
     def generate_titles(self, sections):
         self.generate_calls.append(sections)
@@ -445,6 +477,10 @@ class FakeLlm:
             return self._order
         return list(reversed(range(len(summaries))))
 
+    def summarize_texts(self, texts):
+        self.summarize_calls.append(texts)
+        return texts  # passthrough
+
 
 class FailingLlm:
     """LlmPort stub that always raises LlmUnavailableError."""
@@ -453,6 +489,9 @@ class FailingLlm:
         raise LlmUnavailableError("test failure")
 
     def order_sections(self, summaries):
+        raise LlmUnavailableError("test failure")
+
+    def summarize_texts(self, texts):
         raise LlmUnavailableError("test failure")
 
 
@@ -528,7 +567,6 @@ class TestTocTreeBuilderWithLlm:
 
         headings = [e for e in entries if e.type == "heading"]
         assert len(headings) == 2
-        # TF-IDF fallback should produce non-empty titles
         for h in headings:
             assert len(h.title) > 0
 
@@ -540,10 +578,7 @@ class TestTocTreeBuilderWithLlm:
         entries = builder.build(data, max_depth=2)
 
         headings = [e for e in entries if e.type == "heading"]
-        # FakeAnalyzer splits 10 items into 2 clusters (0..4 and 5..9),
-        # orderer reverses them.
         assert len(headings) == 2
-        # The second cluster's heading should now be first
         first_child_ids = {c.id for c in headings[0].children}
         assert "id_5" in first_child_ids or "id_6" in first_child_ids
 
@@ -589,7 +624,6 @@ class TestDataSimilarityWithLlm:
         result = ds.generate_toc_structure()
 
         assert isinstance(result, list)
-        # LLM should have been called for title generation
         assert len(llm.generate_calls) > 0
 
     def test_headings_use_llm_titles(self):

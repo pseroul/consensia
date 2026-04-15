@@ -14,7 +14,6 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from chroma_client import ChromaClient
-from utils import unformat_text
 
 if TYPE_CHECKING:
     from llm_client import LlmPort
@@ -32,6 +31,7 @@ class IdeaData:
     documents: list[str]
     ids: list[str]
     embeddings: list[list[float]]
+    metadatas: list[dict[str, str]]
 
 
 @dataclass
@@ -226,7 +226,8 @@ class ConstrainedClusteringAnalyzer:
     2. Try each k in [min_clusters, max_clusters]; pick the k that maximises
        the silhouette score (Ward linkage ensures compact, convex clusters).
     3. Compute originality as the normalised Euclidean distance from each
-       point's cluster centroid.
+       point's cluster centroid, normalised per cluster so large clusters do
+       not inflate originality scores relative to small ones.
 
     Args:
         min_clusters: Minimum number of clusters to consider.
@@ -298,16 +299,20 @@ class ConstrainedClusteringAnalyzer:
     def _centroid_originalities(
         self, X: np.ndarray, labels: np.ndarray
     ) -> np.ndarray:
-        """Originality = distance from cluster centroid, normalised to [0, 1]."""
+        """Originality = distance from cluster centroid, normalised per cluster.
+
+        Per-cluster normalisation prevents points in large clusters from
+        appearing more original than equivalent points in small clusters,
+        which would happen with global MinMaxScaler normalisation.
+        """
         dists = np.zeros(len(X), dtype="float32")
         for label in np.unique(labels):
             mask = labels == label
             centroid = X[mask].mean(axis=0)
-            dists[mask] = np.linalg.norm(X[mask] - centroid, axis=1).astype("float32")
-
-        if dists.max() == 0:
-            return dists
-        return MinMaxScaler().fit_transform(dists.reshape(-1, 1)).flatten().astype("float32")
+            cluster_dists = np.linalg.norm(X[mask] - centroid, axis=1).astype("float32")
+            max_d = cluster_dists.max()
+            dists[mask] = cluster_dists / max_d if max_d > 0 else cluster_dists
+        return dists
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +470,7 @@ class TocTreeBuilder:
         Build the full TOC tree.
 
         Args:
-            data:      Ideas to organise (documents, ids, embeddings).
+            data:      Ideas to organise (documents, ids, embeddings, metadatas).
             max_depth: Maximum nesting depth (1 = sections only, 2 = sections+chapters).
 
         Returns:
@@ -474,19 +479,20 @@ class TocTreeBuilder:
         docs = data.documents
         ids = data.ids
         embeddings = data.embeddings
+        metadatas = data.metadatas
         n = len(docs)
 
         # Base case: too few ideas → emit leaves directly.
         if n <= self._MIN_LEAF_SIZE:
             result = self._analyzer.analyze(embeddings)
-            return self._make_leaves(docs, ids, result.originalities)
+            return self._make_leaves(docs, ids, result.originalities, metadatas)
 
         result = self._analyzer.analyze(embeddings)
         real_clusters = np.unique(result.labels[result.labels != -1])
 
         # Single cluster or all noise → no useful split.
         if len(real_clusters) <= 1:
-            return self._make_leaves(docs, ids, result.originalities)
+            return self._make_leaves(docs, ids, result.originalities, metadatas)
 
         entries: list[TocEntry] = []
 
@@ -495,7 +501,7 @@ class TocTreeBuilder:
         for i in noise_idx:
             entries.append(TocEntry(
                 title=ids[i],
-                text=unformat_text(ids[i], docs[i], []),
+                text=metadatas[i]["description"],
                 type="idea",
                 id=ids[i],
                 originality=self._fmt_pct(float(result.originalities[i])),
@@ -511,11 +517,12 @@ class TocTreeBuilder:
             sec_ids = [ids[i] for i in idx]
             sec_emb = [embeddings[i] for i in idx]
             sec_orig = result.originalities[idx]
+            sec_meta = [metadatas[i] for i in idx]
 
             if max_depth >= 2 and len(sec_ids) > self._CHAPTER_THRESHOLD:
-                children = self._build_chapters(sec_docs, sec_ids, sec_emb)
+                children = self._build_chapters(sec_docs, sec_ids, sec_emb, sec_meta)
             else:
-                children = self._make_leaves(sec_docs, sec_ids, sec_orig)
+                children = self._make_leaves(sec_docs, sec_ids, sec_orig, sec_meta)
 
             # Placeholder title – will be replaced by LLM or TF-IDF below.
             section_entries.append(TocEntry(
@@ -567,6 +574,7 @@ class TocTreeBuilder:
         docs: list[str],
         ids: list[str],
         embeddings: list[list[float]],
+        metadatas: list[dict[str, str]],
     ) -> list[TocEntry]:
         """Sub-cluster a section into chapter headings (level 2)."""
         result = self._chapter_analyzer.analyze(embeddings)
@@ -574,7 +582,7 @@ class TocTreeBuilder:
 
         # Only one cluster → return ideas directly (no chapter headings needed).
         if len(real_clusters) <= 1:
-            return self._make_leaves(docs, ids, result.originalities)
+            return self._make_leaves(docs, ids, result.originalities, metadatas)
 
         chapters: list[TocEntry] = []
 
@@ -583,7 +591,7 @@ class TocTreeBuilder:
         for i in noise_idx:
             chapters.append(TocEntry(
                 title=ids[i],
-                text=unformat_text(ids[i], docs[i], []),
+                text=metadatas[i]["description"],
                 type="idea",
                 id=ids[i],
                 originality=self._fmt_pct(float(result.originalities[i])),
@@ -594,13 +602,14 @@ class TocTreeBuilder:
             ch_docs = [docs[i] for i in idx]
             ch_ids = [ids[i] for i in idx]
             ch_orig = result.originalities[idx]
+            ch_meta = [metadatas[i] for i in idx]
 
             chapters.append(TocEntry(
                 title=self._titler.generate(ch_docs),
                 type="heading",
                 level=2,
                 originality=self._fmt_pct(float(ch_orig.mean())),
-                children=self._make_leaves(ch_docs, ch_ids, ch_orig),
+                children=self._make_leaves(ch_docs, ch_ids, ch_orig, ch_meta),
             ))
 
         return chapters
@@ -610,16 +619,17 @@ class TocTreeBuilder:
         docs: list[str],
         ids: list[str],
         originalities: np.ndarray,
+        metadatas: list[dict[str, str]],
     ) -> list[TocEntry]:
         return [
             TocEntry(
                 title=id_,
-                text=unformat_text(id_, doc, []),
+                text=meta["description"],
                 type="idea",
                 id=id_,
                 originality=TocTreeBuilder._fmt_pct(float(orig)),
             )
-            for doc, id_, orig in zip(docs, ids, originalities, strict=False)
+            for doc, id_, orig, meta in zip(docs, ids, originalities, metadatas, strict=False)
         ]
 
     @staticmethod
@@ -693,6 +703,7 @@ class DataSimilarity:
             documents=raw["documents"],
             ids=raw["ids"],
             embeddings=raw["embeddings"],
+            metadatas=raw["metadatas"],
         )
 
         logger.debug("Building TOC tree for %d ideas…", len(data.ids))

@@ -83,10 +83,10 @@ class FakeChromaClient:
     def __init__(self, store: dict) -> None:
         self._store = store
 
-    def insert_idea(self, title: str, content: str, tags=None) -> None:
+    def insert_idea(self, title: str, content: str, tags=None, comments=None) -> None:
         self._store[title] = content
 
-    def update_idea(self, title: str, content: str, tags=None) -> None:
+    def update_idea(self, title: str, content: str, tags=None, comments=None) -> None:
         self._store[title] = content
 
     def remove_idea(self, title: str) -> None:
@@ -105,6 +105,7 @@ class FakeChromaClient:
             "documents": docs,
             "ids": ids,
             "embeddings": [[0.1 * (j + 1) for j in range(6)] for _ in ids],
+            "metadatas": [{"title": i, "tags": "", "description": docs[j]} for j, i in enumerate(ids)],
         }
 
 

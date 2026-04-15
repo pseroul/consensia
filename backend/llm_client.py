@@ -66,6 +66,20 @@ class LlmPort(Protocol):
         """
         ...
 
+    def summarize_texts(self, texts: list[str]) -> list[str]:
+        """Condense each text to 1-2 dense sentences for embedding.
+
+        Args:
+            texts: Raw texts to summarize.
+
+        Returns:
+            Summarized texts, same order and length as input.
+
+        Raises:
+            LlmUnavailableError: If the LLM backend is unreachable or fails.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Prompt builders (shared between Claude and Ollama)
@@ -94,6 +108,15 @@ then advanced topics. Think like a book editor.
 Respond with ONLY a JSON array of 0-based indices in optimal reading order.
 Example: [2, 0, 3, 1]"""
 
+_SUMMARIZE_PROMPT_TEMPLATE = """\
+Summarize each text below into 1-2 dense sentences that capture the core meaning.
+Preserve technical terms and key concepts. Remove editorial boilerplate.
+
+{texts_block}
+
+Respond with ONLY a JSON array of summarized strings, one per input text, same order.
+"""
+
 
 def _build_title_sections_block(sections: list[dict[str, Any]]) -> str:
     parts: list[str] = []
@@ -110,6 +133,12 @@ def _build_order_sections_block(summaries: list[dict[str, Any]]) -> str:
         sample = ", ".join(s.get("idea_titles", [])[:5])
         parts.append(f'{i}. "{s["title"]}" ({s["num_ideas"]} ideas about: {sample})')
     return "\n".join(parts)
+
+
+def _build_summarize_texts_block(texts: list[str]) -> str:
+    return "\n\n".join(
+        f"Text {i+1}:\n{t[:1000]}" for i, t in enumerate(texts)
+    )
 
 
 def _parse_json_array(text: str) -> list:
@@ -179,6 +208,24 @@ class ClaudeLlmClient:
             raise LlmUnavailableError(f"Expected {n} unique indices, got {indices}")
 
         return indices
+
+    def summarize_texts(self, texts: list[str]) -> list[str]:
+        if not texts:
+            return []
+        batch_size = 20
+        results: list[str] = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            block = _build_summarize_texts_block(batch)
+            prompt = _SUMMARIZE_PROMPT_TEMPLATE.format(texts_block=block)
+            raw = self._call(prompt)
+            parsed = _parse_json_array(raw)
+            if len(parsed) != len(batch):
+                raise LlmUnavailableError(
+                    f"Expected {len(batch)} summaries, got {len(parsed)}"
+                )
+            results.extend(str(s) for s in parsed)
+        return results
 
     def _call(self, prompt: str) -> str:
         try:
@@ -250,6 +297,24 @@ class OllamaLlmClient:
 
         return indices
 
+    def summarize_texts(self, texts: list[str]) -> list[str]:
+        if not texts:
+            return []
+        batch_size = 20
+        results: list[str] = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            block = _build_summarize_texts_block(batch)
+            prompt = _SUMMARIZE_PROMPT_TEMPLATE.format(texts_block=block)
+            raw = self._call(prompt)
+            parsed = _parse_json_array(raw)
+            if len(parsed) != len(batch):
+                raise LlmUnavailableError(
+                    f"Expected {len(batch)} summaries, got {len(parsed)}"
+                )
+            results.extend(str(s) for s in parsed)
+        return results
+
     def _call(self, prompt: str) -> str:
         payload = json.dumps({
             "model": self._model,
@@ -299,6 +364,9 @@ class TfidfFallbackClient:
 
     def order_sections(self, section_summaries: list[dict[str, Any]]) -> list[int]:
         return list(range(len(section_summaries)))
+
+    def summarize_texts(self, texts: list[str]) -> list[str]:
+        return texts
 
 
 # ---------------------------------------------------------------------------
