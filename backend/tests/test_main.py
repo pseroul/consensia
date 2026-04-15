@@ -536,11 +536,17 @@ class TestMainAPI:
         mock_instance.load_toc_structure.assert_called_once()
         mock_instance.generate_toc_structure.assert_called_once()
 
+    @patch('backend.main.create_llm_client')
     @patch('backend.main.DataSimilarity')
-    def test_update_toc_structure(self, mock_data_similarity):
+    def test_update_toc_structure(self, mock_data_similarity, mock_create_llm_client):
         """Test updating TOC structure"""
         # Get authentication headers
         headers = self._get_auth_headers()
+
+        # Mock LLM client with a known class name
+        mock_llm = Mock()
+        mock_llm.__class__.__name__ = 'TfidfFallbackClient'
+        mock_create_llm_client.return_value = mock_llm
 
         # Mock the DataSimilarity class
         mock_instance = Mock()
@@ -553,6 +559,7 @@ class TestMainAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["message"] == "toc added successfully"
+        assert "llm_backend" in data
 
         # Verify that DataSimilarity was called
         mock_data_similarity.assert_called_once()

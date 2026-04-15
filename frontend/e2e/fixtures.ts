@@ -245,7 +245,7 @@ export function mockUpdateTocStructure(page: Page): Promise<void> {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ message: 'toc added successfully' }),
+      body: JSON.stringify({ message: 'toc added successfully', llm_backend: 'TfidfFallbackClient' }),
     })
   );
 }

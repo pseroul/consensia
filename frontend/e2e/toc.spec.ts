@@ -241,7 +241,7 @@ test.describe('TOC refresh', () => {
 
     await page.route(`${API_URL}/toc/update`, (route) => {
       postCalled = true;
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'toc added successfully' }) });
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'toc added successfully', llm_backend: 'ClaudeLlmClient' }) });
     });
     await page.route(`${API_URL}/toc/structure`, (route) => {
       getCalled = true;
@@ -253,6 +253,19 @@ test.describe('TOC refresh', () => {
 
     expect(postCalled).toBe(true);
     expect(getCalled).toBe(true);
+  });
+
+  test('shows toast with LLM backend name after successful refresh', async ({ page }) => {
+    await page.route(`${API_URL}/toc/update`, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'toc added successfully', llm_backend: 'ClaudeLlmClient' }) })
+    );
+    await page.route(`${API_URL}/toc/structure`, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_TOC) })
+    );
+
+    await page.getByRole('button', { name: /refresh content/i }).click();
+
+    await expect(page.getByRole('status')).toHaveText('TOC generated with ClaudeLlmClient', { timeout: 5_000 });
   });
 
   test('refreshed content replaces old content', async ({ page }) => {
@@ -269,7 +282,7 @@ test.describe('TOC refresh', () => {
     ];
 
     await page.route(`${API_URL}/toc/update`, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'toc added successfully' }) })
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'toc added successfully', llm_backend: 'OllamaLlmClient' }) })
     );
     await page.route(`${API_URL}/toc/structure`, (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(updatedToc) })
@@ -284,7 +297,7 @@ test.describe('TOC refresh', () => {
   test('Refresh button is disabled and shows spinner during update', async ({ page }) => {
     await page.route(`${API_URL}/toc/update`, async (route) => {
       await new Promise((r) => setTimeout(r, 400));
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'ok' }) });
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'ok', llm_backend: 'TfidfFallbackClient' }) });
     });
     await page.route(`${API_URL}/toc/structure`, (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_TOC) })

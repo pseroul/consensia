@@ -256,7 +256,7 @@ describe('TableOfContents — refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getTocStructure.mockResolvedValue({ data: MOCK_TOC });
-    updateTocStructure.mockResolvedValue({});
+    updateTocStructure.mockResolvedValue({ data: { message: 'toc added successfully', llm_backend: 'ClaudeLlmClient' } });
     getIdeas.mockResolvedValue({ data: MOCK_IDEAS });
   });
 
@@ -305,6 +305,18 @@ describe('TableOfContents — refresh', () => {
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /refresh/i })).toBeDisabled()
+    );
+  });
+
+  it('shows a toast with the LLM backend name after successful refresh', async () => {
+    render(<TableOfContents />);
+    await waitFor(() => screen.getByText('Chapter One'));
+
+    getTocStructure.mockResolvedValueOnce({ data: MOCK_TOC });
+    fireEvent.click(screen.getByRole('button', { name: /refresh content/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('TOC generated with ClaudeLlmClient')
     );
   });
 });

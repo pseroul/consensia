@@ -248,6 +248,7 @@ const TableOfContents = () => {
   const [scoreMap, setScoreMap] = useState({});
   const [tagsMap, setTagsMap] = useState({});
   const [commentsMap, setCommentsMap] = useState({});
+  const [toast, setToast] = useState({ message: '', visible: false });
 
   // Fetch ideas to build score map and optionally filter TOC by selected book
   useEffect(() => {
@@ -295,6 +296,10 @@ const TableOfContents = () => {
   }, [selectedBook]);
 
   const visibleToc = bookIdeas ? filterTocByTitles(tocStructure, bookIdeas) : tocStructure;
+
+  const showToast = (message) => {
+    setToast({ message, visible: true });
+  };
 
   /**
    * Fetch the table of contents structure from the API
@@ -346,7 +351,9 @@ const TableOfContents = () => {
       setError(null);
       
       // First update the TOC structure
-      await updateTocStructure();
+      const updateResponse = await updateTocStructure();
+      const backend = updateResponse.data?.llm_backend ?? 'Unknown';
+      showToast(`TOC generated with ${backend}`);
       
       // Then fetch the updated structure
       const response = await getTocStructure();
@@ -498,12 +505,35 @@ const TableOfContents = () => {
       </div>
 
       {/* Full Content Modal */}
-      <FullContentModal 
+      <FullContentModal
         isOpen={showModal}
         onClose={handleCloseModal}
         content={modalContent.text}
         title={modalContent.title}
       />
+
+      {/* LLM backend notification modal */}
+      {toast.visible && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black bg-opacity-50"
+          onClick={() => setToast({ message: '', visible: false })}
+        >
+          <div
+            role="status"
+            aria-live="polite"
+            className="bg-white rounded-xl px-6 py-5 shadow-2xl border border-gray-100 text-center max-w-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-gray-800 text-sm mb-4">{toast.message}</p>
+            <button
+              onClick={() => setToast({ message: '', visible: false })}
+              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

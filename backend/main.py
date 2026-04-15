@@ -1086,10 +1086,11 @@ async def update_toc_structure(current_user: dict = Depends(get_current_user)) -
     """
     try:
         llm = create_llm_client()
+        llm_client_name = type(llm).__name__
         data_similarity = DataSimilarity(llm=llm)
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, data_similarity.generate_toc_structure)
-        return {"message": "toc added successfully"}
+        return {"message": "toc added successfully", "llm_backend": llm_client_name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}") from e
 @app.post("/verify-otp")

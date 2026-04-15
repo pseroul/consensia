@@ -87,7 +87,9 @@ class TestTocUpdate:
         response = client.post("/toc/update", headers=alice["headers"])
 
         assert response.status_code == 200
-        assert response.json() == {"message": "toc added successfully"}
+        data = response.json()
+        assert data["message"] == "toc added successfully"
+        assert "llm_backend" in data
 
     def test_update_toc_writes_cache_file(self, client, alice, tmp_path, monkeypatch):
         cache_path = tmp_path / "toc.json"
@@ -167,4 +169,6 @@ class TestTocLlmFallback:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         response = client.post("/toc/update", headers=alice["headers"])
         assert response.status_code == 200
-        assert response.json() == {"message": "toc added successfully"}
+        data = response.json()
+        assert data["message"] == "toc added successfully"
+        assert data["llm_backend"] == "TfidfFallbackClient"
