@@ -488,19 +488,16 @@ class TestMainAPI:
         assert "detail" in data
         assert "Invalid or expired code" in data["detail"]
 
-    @patch('backend.main.DataSimilarity')
-    def test_get_toc_structure_from_cache(self, mock_data_similarity):
-        """Test getting TOC structure from cache"""
-        # Get authentication headers
+    @patch('backend.main.FileTocCache')
+    def test_get_toc_structure_from_cache(self, mock_file_toc_cache):
+        """Test getting TOC structure from cache without initialising LLM or DataSimilarity"""
         headers = self._get_auth_headers()
 
-        # Mock the DataSimilarity instance
-        mock_instance = Mock()
-        mock_instance.load_toc_structure.return_value = [
+        mock_cache_instance = Mock()
+        mock_cache_instance.load.return_value = [
             {"title": "Section 1", "type": "heading", "children": []}
         ]
-        mock_instance.generate_toc_structure.return_value = []
-        mock_data_similarity.return_value = mock_instance
+        mock_file_toc_cache.return_value = mock_cache_instance
 
         response = client.get("/toc/structure", headers=headers)
         assert response.status_code == 200
@@ -508,19 +505,20 @@ class TestMainAPI:
         assert len(data) == 1
         assert data[0]["title"] == "Section 1"
 
-        # Verify that load_toc_structure was called and generate_toc_structure was not
-        mock_instance.load_toc_structure.assert_called_once()
-        mock_instance.generate_toc_structure.assert_not_called()
+        # Cache was read; heavy pipeline was never touched
+        mock_cache_instance.load.assert_called_once()
 
     @patch('backend.main.DataSimilarity')
-    def test_get_toc_structure_generate_new(self, mock_data_similarity):
+    @patch('backend.main.FileTocCache')
+    def test_get_toc_structure_generate_new(self, mock_file_toc_cache, mock_data_similarity):
         """Test generating new TOC structure when cache is empty"""
-        # Get authentication headers
         headers = self._get_auth_headers()
 
-        # Mock the DataSimilarity instance
+        mock_cache_instance = Mock()
+        mock_cache_instance.load.return_value = None  # No cache
+        mock_file_toc_cache.return_value = mock_cache_instance
+
         mock_instance = Mock()
-        mock_instance.load_toc_structure.return_value = None  # No cache
         mock_instance.generate_toc_structure.return_value = [
             {"title": "New Section", "type": "heading", "children": []}
         ]
@@ -532,8 +530,8 @@ class TestMainAPI:
         assert len(data) == 1
         assert data[0]["title"] == "New Section"
 
-        # Verify that both methods were called
-        mock_instance.load_toc_structure.assert_called_once()
+        # Cache miss → full generation was triggered
+        mock_cache_instance.load.assert_called_once()
         mock_instance.generate_toc_structure.assert_called_once()
 
     @patch('backend.main.create_llm_client')
