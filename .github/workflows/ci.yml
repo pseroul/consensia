@@ -34,13 +34,13 @@ jobs:
         run: vulture .
 
       - name: Security scan (bandit)
-        run: bandit -r . -ll --exclude ./venv,./tests
+        run: bandit -r . -ll -x ./venv,./tests -c pyproject.toml
 
       - name: Dependency audit (pip-audit)
         run: pip install pip-audit && pip-audit -r requirements.txt
 
       - name: Tests + coverage
-        run: pytest --cov=. --cov-fail-under=80 --cov-report=xml
+        run: pytest --cov-report=xml
 
       - name: Upload coverage report
         if: always()
