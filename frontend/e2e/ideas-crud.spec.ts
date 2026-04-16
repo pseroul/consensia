@@ -28,6 +28,7 @@ import {
   setAuthToken,
   mockGetIdeas,
   mockGetUserIdeas,
+  mockGetBooks,
   mockCreateIdea,
   mockUpdateIdea,
   mockDeleteIdea,
@@ -45,6 +46,7 @@ import {
 // Accepts the Playwright fixtures object so it can be passed directly to
 // test.beforeEach() as well as called explicitly inside a test body.
 async function goToDashboard({ page }: { page: import('@playwright/test').Page }) {
+  await mockGetBooks(page);
   await mockGetIdeas(page);
   await mockGetUserIdeas(page);
   await page.goto('/');
@@ -53,6 +55,9 @@ async function goToDashboard({ page }: { page: import('@playwright/test').Page }
   await page.waitForURL('/dashboard');
   // Wait for the loading spinner to disappear
   await expect(page.getByRole('status').or(page.locator('.animate-spin').first())).not.toBeVisible({ timeout: 5_000 }).catch(() => {});
+  // Select the test book so the "New" button is enabled and book-based filtering works
+  await page.selectOption('[data-testid="book-selector"]', { value: '1' });
+  await expect(page.getByRole('button', { name: /new/i })).toBeEnabled();
 }
 
 

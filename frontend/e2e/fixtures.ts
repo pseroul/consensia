@@ -88,14 +88,18 @@ export function mockRefreshFail(page: Page): Promise<void> {
 // Sample data (mirrors the backend's IdeaItem shape)
 // ---------------------------------------------------------------------------
 
+export const MOCK_BOOKS = [
+  { id: 1, title: 'Test Book' },
+];
+
 export const MOCK_IDEAS = [
-  { id: 1, title: 'Machine Learning', content: 'Gradient descent basics', tags: 'ml;ai' },
-  { id: 2, title: 'Python Tips',      content: 'Use list comprehensions', tags: 'python' },
-  { id: 3, title: 'React Hooks',      content: 'useState and useEffect patterns', tags: '' },
+  { id: 1, title: 'Machine Learning', content: 'Gradient descent basics', tags: 'ml;ai',  book_id: 1 },
+  { id: 2, title: 'Python Tips',      content: 'Use list comprehensions', tags: 'python', book_id: 1 },
+  { id: 3, title: 'React Hooks',      content: 'useState and useEffect patterns', tags: '', book_id: 1 },
 ];
 
 export const MOCK_USER_IDEAS = [
-  { id: 1, title: 'Machine Learning', content: 'Gradient descent basics', tags: 'ml;ai' },
+  { id: 1, title: 'Machine Learning', content: 'Gradient descent basics', tags: 'ml;ai', book_id: 1 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -103,6 +107,16 @@ export const MOCK_USER_IDEAS = [
 // Each helper intercepts exactly one endpoint.  Compose them per-test so
 // each test makes its own expectations about which routes are called.
 // ---------------------------------------------------------------------------
+
+export function mockGetBooks(page: Page, books = MOCK_BOOKS): Promise<void> {
+  return page.route(`${API_URL}/books`, (route: Route) => {
+    if (route.request().method() === 'GET') {
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(books) });
+    } else {
+      route.continue();
+    }
+  });
+}
 
 export function mockGetIdeas(page: Page, ideas = MOCK_IDEAS): Promise<void> {
   return page.route(`${API_URL}/ideas`, (route: Route) =>
