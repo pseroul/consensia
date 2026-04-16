@@ -7,7 +7,7 @@ import uvicorn
 from authenticator import verify_access
 from fastapi.middleware.cors import CORSMiddleware
 from config import set_env_var
-from data_similarity import DataSimilarity
+from data_similarity import DataSimilarity, FileTocCache
 from llm_client import create_llm_client
 import logging
 import os
@@ -1061,14 +1061,12 @@ async def get_toc_structure(current_user: dict = Depends(get_current_user)) -> l
     """
     
     try:
-        llm = create_llm_client()
-        data_similarity = DataSimilarity(llm=llm)
-        toc = None
-        toc = data_similarity.load_toc_structure()
+        toc = FileTocCache().load()
         if toc is not None:
             return toc
-        else:
-            return data_similarity.generate_toc_structure()
+        llm = create_llm_client()
+        data_similarity = DataSimilarity(llm=llm)
+        return data_similarity.generate_toc_structure()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}") from e
 @app.post("/toc/update", response_model=dict)
