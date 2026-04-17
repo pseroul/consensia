@@ -220,9 +220,10 @@ const Dashboard = () => {
           </div>
           
           {/* Similar Ideas Button */}
-          <button 
+          <button
             onClick={() => fetchSimilarIdeas(searchTerm)}
             disabled={!searchTerm.trim() || isSearchingSimilar}
+            aria-label="Similar"
             className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white p-2 rounded-lg flex items-center gap-2 transition-colors"
           >
             {isSearchingSimilar ? (
@@ -241,6 +242,7 @@ const Dashboard = () => {
             }}
             disabled={!selectedBook}
             title={!selectedBook ? 'Select a book first' : undefined}
+            aria-label="New idea"
             className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white p-2 rounded-lg flex items-center gap-2 transition-colors"
           >
             <Plus size={20} />

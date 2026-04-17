@@ -96,7 +96,8 @@ test.describe('Tags & Ideas rendering', () => {
 
   test('shows all tag names', async ({ page }) => {
     await expect(page.getByText('ml')).toBeVisible();
-    await expect(page.getByText('python')).toBeVisible();
+    // Use exact match to avoid matching "Python Tips" idea title as a substring
+    await expect(page.getByText('python', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('orphan')).toBeVisible();
   });
 
@@ -115,8 +116,8 @@ test.describe('Tags & Ideas rendering', () => {
   });
 
   test('shows idea count per tag', async ({ page }) => {
-    // ml tag has 1 idea
-    await expect(page.getByText(/\(1 ideas?\)/)).toBeVisible();
+    // ml tag has 1 idea; use .first() since multiple tags may each show "(1 ideas)"
+    await expect(page.getByText(/\(1 ideas?\)/).first()).toBeVisible();
   });
 
   test('orphan tag (zero ideas) shows a delete button', async ({ page }) => {
@@ -309,7 +310,8 @@ test.describe('Tag deletion', () => {
     await page.getByRole('button', { name: /delete tag orphan/i }).click();
     await page.getByRole('button', { name: /^delete$/i }).click();
 
-    await expect(page.getByText('orphan')).not.toBeVisible({ timeout: 5_000 });
+    // Use exact: true to avoid matching the modal text "...delete the tag "orphan"..."
+    await expect(page.getByText('orphan', { exact: true })).not.toBeVisible({ timeout: 5_000 });
   });
 
   test('cancelling the deletion modal does NOT call DELETE /tags/{name}', async ({ page }) => {
@@ -365,7 +367,7 @@ test.describe('Tags & Ideas navigation', () => {
     await page.goto('/tags-ideas');
     await page.waitForURL('/tags-ideas');
 
-    await page.getByRole('link', { name: /back to dashboard/i }).click();
+    await page.getByRole('link', { name: /back to dashboard/i }).evaluate(el => (el as HTMLElement).click());
     await page.waitForURL('/dashboard');
     await expect(page).toHaveURL('/dashboard');
   });

@@ -18,7 +18,7 @@ const FullContentModal = ({ isOpen, onClose, content, title }) => {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black bg-opacity-70">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-xl font-bold text-gray-900">{title}</h2>
           <button 
@@ -519,12 +519,10 @@ const TableOfContents = () => {
           onClick={() => setToast({ message: '', visible: false })}
         >
           <div
-            role="status"
-            aria-live="polite"
             className="bg-white rounded-xl px-6 py-5 shadow-2xl border border-gray-100 text-center max-w-xs"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-gray-800 text-sm mb-4">{toast.message}</p>
+            <p role="status" aria-live="polite" className="text-gray-800 text-sm mb-4">{toast.message}</p>
             <button
               onClick={() => setToast({ message: '', visible: false })}
               className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"

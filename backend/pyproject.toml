@@ -28,3 +28,10 @@ ignore = [
 min_confidence = 80
 paths = ["."]
 exclude = ["venv/"]
+
+[tool.bandit]
+skips = [
+    "B104",  # Binding to 0.0.0.0 is intentional for the server entrypoint (mirrors S104 ruff ignore)
+    "B310",  # urlopen used with http:// only; already annotated with noqa:S310 (mirrors S310)
+    "B608",  # Parameterized IN-clause placeholders are not SQL injection vectors (mirrors S608 ruff ignore)
+]

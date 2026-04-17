@@ -333,7 +333,7 @@ test.describe('TOC navigation', () => {
     await page.goto('/table-of-contents');
     await page.waitForURL('/table-of-contents');
 
-    await page.getByRole('link', { name: /back to dashboard/i }).click();
+    await page.getByRole('link', { name: /back to dashboard/i }).evaluate(el => (el as HTMLElement).click());
     await page.waitForURL('/dashboard');
     await expect(page).toHaveURL('/dashboard');
   });

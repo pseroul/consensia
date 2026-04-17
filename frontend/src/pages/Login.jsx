@@ -149,7 +149,6 @@ const Login = () => {
                   // Clear error when user starts typing
                   if (error) setError('');
                 }}
-                required
                 aria-invalid={!!error && email.trim() === ''}
                 aria-describedby={error && email.trim() === '' ? "email-error" : undefined}
               />
@@ -172,7 +171,6 @@ const Login = () => {
                 className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all bg-gray-50 text-center text-2xl tracking-[0.5em] font-mono"
                 value={otpCode}
                 onChange={handleOtpChange}
-                required
                 aria-invalid={!!error && otpCode.length !== 6}
                 aria-describedby={error && otpCode.length !== 6 ? "otp-error" : undefined}
               />

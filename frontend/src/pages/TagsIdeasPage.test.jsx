@@ -424,7 +424,7 @@ describe('TagsIdeasPage — delete tag flow', () => {
     await waitFor(() => screen.getByText('empty-tag'));
 
     fireEvent.click(screen.getByRole('button', { name: /delete tag empty-tag/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm deletion/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
     await waitFor(() =>
       expect(deleteTag).toHaveBeenCalledWith('empty-tag')
@@ -436,7 +436,7 @@ describe('TagsIdeasPage — delete tag flow', () => {
     await waitFor(() => screen.getByText('empty-tag'));
 
     fireEvent.click(screen.getByRole('button', { name: /delete tag empty-tag/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm deletion/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
     // getTags called once on mount, once after delete
     await waitFor(() => expect(getTags).toHaveBeenCalledTimes(2));
@@ -447,7 +447,7 @@ describe('TagsIdeasPage — delete tag flow', () => {
     await waitFor(() => screen.getByText('empty-tag'));
 
     fireEvent.click(screen.getByRole('button', { name: /delete tag empty-tag/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm deletion/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
     await waitFor(() =>
       expect(screen.queryByText('Confirm Deletion')).not.toBeInTheDocument()
@@ -473,7 +473,7 @@ describe('TagsIdeasPage — delete tag flow', () => {
     await waitFor(() => screen.getByText('empty-tag'));
 
     fireEvent.click(screen.getByRole('button', { name: /delete tag empty-tag/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm deletion/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
     await waitFor(() =>
       expect(screen.getByText(/failed to delete tag/i)).toBeInTheDocument()
