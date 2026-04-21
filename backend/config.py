@@ -19,7 +19,7 @@ def set_env_var() -> None:
         os.environ.setdefault('ANTHROPIC_API_KEY', '')
         os.environ.setdefault('LLM_MODEL', 'claude-haiku-4-5-20251001')
         os.environ.setdefault('OLLAMA_URL', 'http://localhost:11434')
-        os.environ.setdefault('OLLAMA_MODEL', 'phi3:mini')
+        os.environ.setdefault('OLLAMA_MODEL', 'qwen2:1.5b')
         
         # Load origins from site.json
         site_json_path = os.path.join(os.path.dirname(__file__), "data", "site.json")

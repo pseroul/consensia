@@ -710,7 +710,7 @@ class DataSimilarity:
         tree = self._tree_builder.build(data)
 
         result = [entry.to_dict() for entry in tree]
-        logger.info(f"toc result:{result}")
+        
         self._cache.save(result)
         return result
 

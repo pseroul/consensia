@@ -312,35 +312,30 @@ class TestClaudeLlmClient:
 
 @pytest.mark.unit
 class TestOllamaLlmClient:
-    def test_generate_titles_success(self):
-        response_body = json.dumps({
-            "response": '["The Art of Code", "Digital Horizons"]'
-        }).encode()
+    def test_generate_titles_calls_once_per_section(self):
+        # Ollama generates titles one section at a time (small-model-safe approach)
+        response_body = json.dumps({"response": "Cooling Systems"}).encode()
 
         mock_resp = MagicMock()
         mock_resp.read.return_value = response_body
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.llm_client.urlopen", return_value=mock_resp):
+        with patch("backend.llm_client.urlopen", return_value=mock_resp) as mock_urlopen:
             client = OllamaLlmClient(base_url="http://fake:11434", model="test")
-            titles = client.generate_titles(_sample_sections(2))
+            titles = client.generate_titles(_sample_sections(3))
 
-        assert titles == ["The Art of Code", "Digital Horizons"]
+        assert len(titles) == 3
+        assert mock_urlopen.call_count == 3  # one call per section
 
-    def test_order_sections_success(self):
-        response_body = json.dumps({"response": "[1, 0, 2]"}).encode()
-
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = response_body
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = MagicMock(return_value=False)
-
-        with patch("backend.llm_client.urlopen", return_value=mock_resp):
-            client = OllamaLlmClient(base_url="http://fake:11434", model="test")
+    def test_order_sections_returns_identity(self):
+        # Small models can't reliably produce full permutations; Ollama client
+        # returns identity order without making a network call.
+        client = OllamaLlmClient(base_url="http://fake:11434", model="test")
+        with patch("backend.llm_client.urlopen") as mock_urlopen:
             order = client.order_sections(_sample_summaries(3))
-
-        assert order == [1, 0, 2]
+            mock_urlopen.assert_not_called()
+        assert order == [0, 1, 2]
 
     def test_network_error_raises_llm_unavailable(self):
         with patch("backend.llm_client.urlopen", side_effect=URLError("refused")):
@@ -361,6 +356,19 @@ class TestOllamaLlmClient:
             result = client.summarize_texts(["Long text A", "Long text B"])
 
         assert result == ["Summary A", "Summary B"]
+
+    def test_model_not_found_raises_llm_unavailable(self):
+        response_body = json.dumps({"error": "model 'no-such-model' not found"}).encode()
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = response_body
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("backend.llm_client.urlopen", return_value=mock_resp):
+            client = OllamaLlmClient(base_url="http://fake:11434", model="no-such-model")
+            with pytest.raises(LlmUnavailableError, match="model 'no-such-model' not found"):
+                client.generate_titles(_sample_sections(1))
 
     def test_summarize_texts_empty_returns_empty(self):
         client = OllamaLlmClient(base_url="http://fake:11434", model="test")

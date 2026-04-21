@@ -107,6 +107,10 @@ then advanced topics. Think like a book editor.
 Respond with ONLY a JSON array of 0-based indices in optimal reading order.
 Example: [2, 0, 3, 1]"""
 
+_TITLE_SINGLE_PROMPT_TEMPLATE = """\
+Book chapter title (3-6 words) for ideas about: {ideas}
+Reply with ONLY the title, no punctuation."""
+
 _SUMMARIZE_PROMPT_TEMPLATE = """\
 Summarize each text below into 1-2 dense sentences that capture the core meaning.
 Preserve technical terms and key concepts. Remove editorial boilerplate.
@@ -231,6 +235,7 @@ class ClaudeLlmClient:
         logger.info("ClaudeLlmClient initialised (model=%s)", self._model)
 
     def generate_titles(self, sections: list[dict[str, Any]]) -> list[str]:
+        logger.debug("ClaudeLlmClient generate_titles")
         block = _build_title_sections_block(sections)
         prompt = _TITLE_PROMPT_TEMPLATE.format(sections_block=block)
         raw = self._call(prompt)
@@ -311,7 +316,7 @@ class OllamaLlmClient:
         self._base_url = (
             base_url or os.getenv("OLLAMA_URL", "http://localhost:11434")
         ).rstrip("/")
-        self._model = model or os.getenv("OLLAMA_MODEL", "phi3:mini")
+        self._model = model or os.getenv("OLLAMA_MODEL", "qwen2:1.5b")
         logger.info(
             "OllamaLlmClient initialised (url=%s, model=%s)",
             self._base_url,
@@ -319,31 +324,26 @@ class OllamaLlmClient:
         )
 
     def generate_titles(self, sections: list[dict[str, Any]]) -> list[str]:
-        block = _build_title_sections_block(sections)
-        prompt = _TITLE_PROMPT_TEMPLATE.format(sections_block=block)
+        """Generate titles one section at a time.
+
+        Small Ollama models (e.g. qwen2:1.5b) ignore section grouping when
+        given a batch prompt and return one title per idea instead of one per
+        section.  Generating each title in a separate call is more reliable.
+        """
+        return [self._generate_single_title(sec.get("ideas", [])) for sec in sections]
+
+    def _generate_single_title(self, ideas: list[str]) -> str:
+        ideas_str = ", ".join(str(idea)[:80] for idea in ideas[:6])
+        prompt = _TITLE_SINGLE_PROMPT_TEMPLATE.format(ideas=ideas_str)
         raw = self._call(prompt)
-        titles = _parse_json_array(raw)
-
-        if len(titles) != len(sections):
-            raise LlmUnavailableError(
-                f"Expected {len(sections)} titles, got {len(titles)}"
-            )
-
-        return [self._sanitise_title(t) for t in titles]
+        return self._sanitise_title(raw)
 
     def order_sections(self, section_summaries: list[dict[str, Any]]) -> list[int]:
-        block = _build_order_sections_block(section_summaries)
-        prompt = _ORDER_PROMPT_TEMPLATE.format(sections_block=block)
-        raw = self._call(prompt)
-        indices = _parse_json_array(raw)
-
-        n = len(section_summaries)
-        if not all(isinstance(i, int) and 0 <= i < n for i in indices):
-            raise LlmUnavailableError(f"Invalid indices in LLM response: {indices}")
-        if len(set(indices)) != n:
-            raise LlmUnavailableError(f"Expected {n} unique indices, got {indices}")
-
-        return indices
+        # Small Ollama models (e.g. qwen2:1.5b) consistently drop indices when
+        # there are many sections, producing incomplete permutations that fail
+        # validation.  Return identity order and let the caller apply its own
+        # heuristic ordering instead.
+        return list(range(len(section_summaries)))
 
     def summarize_texts(self, texts: list[str]) -> list[str]:
         if not texts:
@@ -380,12 +380,17 @@ class OllamaLlmClient:
         try:
             with urlopen(req, timeout=self._TIMEOUT) as resp:  # noqa: S310
                 body = json.loads(resp.read().decode())
+                if "error" in body:
+                    raise LlmUnavailableError(f"Ollama error: {body['error']}")
                 return body.get("response", "")
+        except LlmUnavailableError:
+            raise
         except Exception as exc:
             raise LlmUnavailableError(f"Ollama error: {exc}") from exc
 
     def _sanitise_title(self, title: str) -> str:
-        title = title.strip().strip('"').strip("'").strip()
+        # Take only the first line — small models sometimes append extra lines
+        title = title.split("\n")[0].strip().strip('"').strip("'").strip()
         if len(title) > self._MAX_TITLE_LEN:
             title = title[: self._MAX_TITLE_LEN].rsplit(" ", 1)[0]
         return title if title else "Untitled Section"
@@ -405,6 +410,7 @@ class TfidfFallbackClient:
         logger.info("TfidfFallbackClient initialised (no LLM available)")
 
     def generate_titles(self, sections: list[dict[str, Any]]) -> list[str]:
+        logger.debug("TfidfFallbackClient generate_titles")
         return [
             self._titler.generate(sec.get("ideas", []))
             for sec in sections
