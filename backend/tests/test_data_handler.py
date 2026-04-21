@@ -295,7 +295,7 @@ class TestDataHandler:
         conn.commit()
         conn.close()
 
-        result = add_idea("New Idea", "New Content", "test@example.com", book_id)
+        result = add_idea("New Idea", "New Content", "test@example.com", book_id, tags=["tag1"])
         assert result > 0
 
         # Verify the idea was inserted with the correct book
@@ -315,7 +315,11 @@ class TestDataHandler:
         conn.close()
         assert row[0] == user_id
         assert row[1] == book_id
-    
+
+        mock_instance.insert_idea.assert_called_once_with(
+            title="New Idea", content="New Content", tags=["tag1"]
+        )
+
     @patch('backend.data_handler.ChromaClient')
     def test_add_idea_nonexistent_user(self, mock_chroma_client) -> None:
         """Test add_idea function with non-existent user email"""
@@ -493,8 +497,8 @@ class TestDataHandler:
         conn.commit()
         conn.close()
         
-        update_idea(idea_id, "Updated Idea", "Updated Content")
-        
+        update_idea(idea_id, "Updated Idea", "Updated Content", tags=["tag1"])
+
         # Verify the idea was updated
         conn = sqlite3.connect(self.test_db)
         cursor = conn.cursor()
@@ -503,6 +507,10 @@ class TestDataHandler:
         conn.close()
         assert result[0] == "Updated Idea"
         assert result[1] == "Updated Content"
+
+        mock_instance.update_idea.assert_called_once_with(
+            title="Updated Idea", content="Updated Content", tags=["tag1"]
+        )
 
     @patch('backend.data_handler.ChromaClient')
     def test_embed_all_ideas(self, mock_chroma_client) -> None:
@@ -528,9 +536,12 @@ class TestDataHandler:
         
         # This should not raise an exception
         embed_all_ideas()
-        
-        # Verify that insert_idea was called
-        mock_instance.insert_idea.assert_called()
+
+        # Verify the collection was deleted and bulk_insert was called
+        mock_instance.client.delete_collection.assert_called_once_with(
+            mock_instance.collection.name
+        )
+        mock_instance.bulk_insert.assert_called_once()
 
     def test_get_user_ideas_empty(self) -> None:
         """Test get_user_ideas when user has no ideas"""

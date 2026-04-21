@@ -501,7 +501,7 @@ class TocTreeBuilder:
         for i in noise_idx:
             entries.append(TocEntry(
                 title=ids[i],
-                text=metadatas[i]["description"],
+                text=metadatas[i].get("description", ""),
                 type="idea",
                 id=ids[i],
                 originality=self._fmt_pct(float(result.originalities[i])),
@@ -591,7 +591,7 @@ class TocTreeBuilder:
         for i in noise_idx:
             chapters.append(TocEntry(
                 title=ids[i],
-                text=metadatas[i]["description"],
+                text=metadatas[i].get("description", ""),
                 type="idea",
                 id=ids[i],
                 originality=self._fmt_pct(float(result.originalities[i])),
@@ -624,7 +624,7 @@ class TocTreeBuilder:
         return [
             TocEntry(
                 title=id_,
-                text=meta["description"],
+                text=meta.get("description", ""),
                 type="idea",
                 id=id_,
                 originality=TocTreeBuilder._fmt_pct(float(orig)),
@@ -706,10 +706,11 @@ class DataSimilarity:
             metadatas=raw["metadatas"],
         )
 
-        logger.debug("Building TOC tree for %d ideas…", len(data.ids))
+        logger.info("Building TOC tree for %d ideas…", len(data.ids))
         tree = self._tree_builder.build(data)
 
         result = [entry.to_dict() for entry in tree]
+        logger.info(f"toc result:{result}")
         self._cache.save(result)
         return result
 

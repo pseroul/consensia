@@ -65,6 +65,21 @@ class TestParseJsonArray:
         text = 'Result:\n[\n  "Title A",\n  "Title B"\n]'
         assert _parse_json_array(text) == ["Title A", "Title B"]
 
+    def test_parses_array_when_preamble_contains_brackets(self):
+        """Ollama/phi3 often uses [Section N] notation before the JSON answer."""
+        text = 'For [section 1] and [section 2]:\n["Title A", "Title B"]'
+        assert _parse_json_array(text) == ["Title A", "Title B"]
+
+    def test_parses_array_with_brackets_inside_string_values(self):
+        """Brackets inside quoted strings must not confuse the depth counter."""
+        text = '["Title with [brackets]", "Normal Title"]'
+        assert _parse_json_array(text) == ["Title with [brackets]", "Normal Title"]
+
+    def test_parses_first_valid_array_skipping_non_json_brackets(self):
+        """Non-JSON bracket pairs before the answer are skipped."""
+        text = 'Based on [your request]: ["T1", "T2", "T3"]'
+        assert _parse_json_array(text) == ["T1", "T2", "T3"]
+
 
 # ---------------------------------------------------------------------------
 # Prompt builders

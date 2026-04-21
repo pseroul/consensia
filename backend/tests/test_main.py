@@ -261,7 +261,8 @@ class TestMainAPI:
 
         # Verify that add_idea was called with correct parameters (using email instead of owner_id)
         mock_add_idea.assert_called_once_with(
-            "New Idea", "This is a new idea", owner_email="test@example.com", book_id=1
+            "New Idea", "This is a new idea", owner_email="test@example.com", book_id=1,
+            tags=["tag1", "tag2", "tag3"]
         )
 
         # Verify that tags were processed
@@ -379,7 +380,9 @@ class TestMainAPI:
         assert data["message"] == "Idea '1' updated successfully"
 
         # Verify that update_idea was called
-        mock_update_idea.assert_called_once_with(id=1, title="Updated Idea", content="Updated content")
+        mock_update_idea.assert_called_once_with(
+            id=1, title="Updated Idea", content="Updated content", tags=["new-tag1", "new-tag2"]
+        )
 
     @patch('backend.main.remove_idea')
     def test_delete_idea(self, mock_remove_idea):

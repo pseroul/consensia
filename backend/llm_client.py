@@ -13,7 +13,6 @@ based on environment variables and service reachability.
 import json
 import logging
 import os
-import re
 from typing import Any, Protocol
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -142,11 +141,60 @@ def _build_summarize_texts_block(texts: list[str]) -> str:
 
 
 def _parse_json_array(text: str) -> list:
-    """Extract and parse a JSON array from LLM output."""
-    match = re.search(r"\[.*]", text, re.DOTALL)
-    if not match:
-        raise LlmUnavailableError(f"No JSON array found in LLM response: {text[:200]}")
-    return json.loads(match.group())
+    """Extract and parse a JSON array from LLM output.
+
+    Scans left-to-right for ``[``, finds its matching ``]`` using a bracket
+    depth counter that respects JSON string boundaries, then tries
+    ``json.loads`` on the candidate.  Repeats until a valid JSON list is
+    found.
+
+    This is robust against greedy-regex failures when the LLM includes
+    bracket notation in surrounding explanation text, e.g.:
+      "For [section 1]:\\n[\\"Title A\\", \\"Title B\\"]"
+    A naive greedy ``\\[.*]`` would match from ``[section 1]`` all the way
+    to the last ``]``, producing invalid JSON.
+    """
+    i = 0
+    n = len(text)
+    while i < n:
+        start = text.find("[", i)
+        if start == -1:
+            break
+        # Walk forward to find the matching ']', tracking string boundaries.
+        depth = 0
+        in_string = False
+        escape_next = False
+        end = None
+        for j in range(start, n):
+            c = text[j]
+            if escape_next:
+                escape_next = False
+                continue
+            if c == "\\" and in_string:
+                escape_next = True
+                continue
+            if c == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+                if depth == 0:
+                    end = j + 1
+                    break
+        if end is None:
+            break  # unmatched '[', nothing more to try
+        try:
+            result = json.loads(text[start:end])
+            if isinstance(result, list):
+                return result
+        except (json.JSONDecodeError, ValueError):
+            pass
+        i = start + 1
+    raise LlmUnavailableError(f"No JSON array found in LLM response: {text[:200]}")
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +381,7 @@ class OllamaLlmClient:
             with urlopen(req, timeout=self._TIMEOUT) as resp:  # noqa: S310
                 body = json.loads(resp.read().decode())
                 return body.get("response", "")
-        except (URLError, OSError, json.JSONDecodeError, KeyError) as exc:
+        except Exception as exc:
             raise LlmUnavailableError(f"Ollama error: {exc}") from exc
 
     def _sanitise_title(self, title: str) -> str:

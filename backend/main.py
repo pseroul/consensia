@@ -540,22 +540,20 @@ async def create_idea(data: IdeaItem, current_user: dict = Depends(get_current_u
     if data.book_id is None:
         raise HTTPException(status_code=400, detail="book_id is required")
     try:
-        new_id = add_idea(data.title, data.content, owner_email=user_email, book_id=data.book_id)
+        tags_list = [tag.strip() for tag in data.tags.split(';') if tag.strip()] if data.tags else []
+        new_id = add_idea(data.title, data.content, owner_email=user_email, book_id=data.book_id, tags=tags_list)
 
         if new_id < 0:
             return {"id": new_id}
 
         # Handle tags if provided - convert string to list if needed
-        if data.tags and data.tags.strip():
-            # Split the semicolon-separated string into individual tags
-            tags_list = [tag.strip() for tag in data.tags.split(';') if tag.strip()]
-            for tag in tags_list:
-                try:
-                    add_tag(tag)
-                    add_relation(new_id, tag)
-                except Exception as e:
-                    # Continue processing other tags even if one fails
-                    logger.info(f"Warning: Failed to process tag '{tag}': {str(e)}")
+        for tag in tags_list:
+            try:
+                add_tag(tag)
+                add_relation(new_id, tag)
+            except Exception as e:
+                # Continue processing other tags even if one fails
+                logger.info(f"Warning: Failed to process tag '{tag}': {str(e)}")
         
         return {"id": new_id}
     except Exception as e:
@@ -615,10 +613,9 @@ async def update_idea_item(id: int, idea: IdeaItem, current_user: dict = Depends
         HTTPException: If there's an error updating the data in the database.
     """
     try:
-        update_idea(id=id, title=idea.title, content=idea.content)
+        tags_list = [tag.strip() for tag in idea.tags.split(';') if tag.strip()] if idea.tags else []
+        update_idea(id=id, title=idea.title, content=idea.content, tags=tags_list)
         if idea.tags and idea.tags.strip():
-            # Split the semicolon-separated string into individual tags
-            tags_list = [tag.strip() for tag in idea.tags.split(';') if tag.strip()]
             
             # Get current tags for this idea
             current_tags = get_tags_from_idea(id)
@@ -1071,7 +1068,9 @@ async def get_toc_structure(current_user: dict = Depends(get_current_user)) -> l
         data_similarity = DataSimilarity(llm=llm)
         return data_similarity.generate_toc_structure()
     except Exception as e:
+        logger.exception("TOC structure generation failed")
         raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}") from e
+
 @app.post("/toc/update", response_model=dict)
 async def update_toc_structure(current_user: dict = Depends(get_current_user)) -> dict[str, str]:
     """Update the hierarchical table of contents structure
@@ -1091,9 +1090,12 @@ async def update_toc_structure(current_user: dict = Depends(get_current_user)) -
         data_similarity = DataSimilarity(llm=llm)
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, data_similarity.generate_toc_structure)
+        
         return {"message": "toc added successfully", "llm_backend": llm_client_name}
     except Exception as e:
+        logger.exception("TOC update failed")
         raise HTTPException(status_code=500, detail=f"Error generating TOC structure: {str(e)}") from e
+
 @app.post("/verify-otp")
 def verify_otp(request: LoginRequest) -> dict[str, str]:
     """Verify the OTP code sent by React and return JWT token.

@@ -368,7 +368,7 @@ def get_similar_idea(idea: str) -> list[dict[str, Any]]:
     return df.to_dict("records")
 
 # ADD FUNCTIONS
-def add_idea(title: str, content: str, owner_email: str, book_id: int) -> int:
+def add_idea(title: str, content: str, owner_email: str, book_id: int, tags: list[str] | None = None) -> int:
     """
     Add a new idea to the database.
 
@@ -380,6 +380,7 @@ def add_idea(title: str, content: str, owner_email: str, book_id: int) -> int:
         content (str): content of the idea to add
         owner_email (str): Email of the idea's owner
         book_id (int): ID of the book this idea belongs to
+        tags (list[str] | None): Tags for the idea, used in ChromaDB metadata
 
     Returns:
         int: the id of the new idea
@@ -405,9 +406,10 @@ def add_idea(title: str, content: str, owner_email: str, book_id: int) -> int:
         conn.commit()
         new_id = cursor.lastrowid
 
+        _tags = tags or []
         try:
             with ThreadPoolExecutor() as executor:
-                future = executor.submit(lambda: ChromaClient().insert_idea(title=title, content=content))
+                future = executor.submit(lambda: ChromaClient().insert_idea(title=title, content=content, tags=_tags))
                 future.result(timeout=30)
         except Exception as e:
             logger.info(f"Warning: ChromaDB embedding failed for '{title}': {e}")
@@ -561,34 +563,36 @@ def remove_relation(idea_id: int, tag_name: str) -> None:
     finally:
         conn.close()
 
-def update_idea(id: int, title: str, content: str) -> None:
+def update_idea(id: int, title: str, content: str, tags: list[str] | None = None) -> None:
     """
     Update an existing idea in the database.
-    
+
     Updates the content of an existing idea and updates the
     corresponding embedding in the ChromaClient.
-    
+
     Args:
         id (int): Id of the idea
         title (str): Name of the idea to update
         content (str): New content for the idea
-        
+        tags (list[str] | None): Updated tags for the idea, used in ChromaDB metadata
+
     Returns:
         None
     """
     logger.info(f"update_idea {id}: {title} / {content}")
     conn = sqlite3.connect(os.getenv('NAME_DB'))
     cursor = conn.cursor()
+    _tags = tags or []
     try:
         cursor.execute(
             "UPDATE ideas SET content = ?, title = ? WHERE id = ?",
             (content, title, id)
         )
         conn.commit()
-        
+
         # Run embedding update asynchronously using thread pool
         with ThreadPoolExecutor() as executor:
-            future = executor.submit(lambda: ChromaClient().update_idea(title=title, content=content))
+            future = executor.submit(lambda: ChromaClient().update_idea(title=title, content=content, tags=_tags))
             # Wait for completion but don't block the main thread significantly
             future.result(timeout=30)  # 30 second timeout
             
@@ -603,34 +607,36 @@ def update_idea(id: int, title: str, content: str) -> None:
 def embed_all_ideas() -> None:
     """
     Regenerate embeddings for all ideas in the database.
-    
-    Retrieves all ideas from the database and creates embeddings
-    for each one using the ChromaClient.
-    
+
+    Deletes the existing ChromaDB collection and rebuilds it from SQLite
+    using bulk_insert to ensure embeddings, metadata, and tags are all in sync.
+
     Returns:
         None
     """
     try:
-        # Use the existing get_ideas() function to retrieve all data
         ideas = get_ideas()
-        
-        # Create Embedder instance
-        embedding = ChromaClient()
-        
-        # Process all ideas
         total_items = len(ideas)
         logger.info(f"Regenerating embeddings for {total_items} ideas...")
         print(f"Regenerating embeddings for {total_items} ideas...")
-        
-        for i, item in enumerate(ideas, 1):
-            try:
-                embedding.insert_idea(title=item['title'], content=item['content'])
-                logger.info(f"Processed {i}/{total_items}: {item['title']}")
-            except Exception as e:
-                logger.info(f"Error processing item '{item['title']}': {e}")
-                
+
+        chroma = ChromaClient()
+        # Delete the collection first to prevent duplicate-id errors and
+        # index inconsistency from partial updates.
+        chroma.client.delete_collection(chroma.collection.name)
+        chroma = ChromaClient()
+
+        bulk = [
+            {
+                "title": item["title"],
+                "description": item["content"],
+                "tags": [t for t in (item.get("tags") or "").split(";") if t],
+            }
+            for item in ideas
+        ]
+        chroma.bulk_insert(bulk)
         logger.info("Embedding regeneration completed successfully.")
-        
+
     except Exception as e:
         logger.info(f"Error in embed_all_ideas: {e}")
         raise
